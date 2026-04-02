@@ -2001,6 +2001,7 @@ GameObject:
   - component: {fileID: 1480564657359395073}
   - component: {fileID: 5057221855074315711}
   - component: {fileID: 7991614105654312571}
+  - component: {fileID: 2332606633509716904}
   m_Layer: 0
   m_Name: "\uCE74\uBBF8\uC720 \uB85C\uB78C"
   m_TagString: Untagged
@@ -2127,6 +2128,7 @@ MonoBehaviour:
   attackCooldown: 0.6
   attackLockTime: 0.35
   killerLight: {fileID: 1497583253590292863}
+  carryOffset: {x: 0, y: 0.5, z: 0.8}
 --- !u!114 &7991614105654312571
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2147,6 +2149,21 @@ MonoBehaviour:
   - {fileID: 3398308949863194136}
   - {fileID: 5057221855074315711}
   ForceRemoteRenderTimeframe: 0
+--- !u!114 &2332606633509716904
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3517461332826136212}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 327974453a28ea640a828048c583ca64, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  interactRange: 2
+  minTriggerTime: 2
+  maxTriggerTime: 5
 --- !u!1 &3821336974943596441
 GameObject:
   m_ObjectHideFlags: 0
