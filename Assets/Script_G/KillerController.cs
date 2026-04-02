@@ -284,7 +284,15 @@ public class KillerController : NetworkBehaviour
         if (actorCc != null) actorCc.enabled = false;
 
         RPC_SyncCarry(actorId, true);
+        RPC_PlayPickup(); // 들어올리는 애니메이션 트리거
         Debug.Log($"[KillerController] 연기자 들기: {actorObj.name}");
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_PlayPickup()
+    {
+        if (anim != null)
+            anim.SetTrigger("Pickup");
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -303,7 +311,15 @@ public class KillerController : NetworkBehaviour
         if (actorCc != null) actorCc.enabled = true;
 
         RPC_SyncCarry(actorId, false);
+        RPC_PlayPutDown(); // 내려놓는 애니메이션 트리거
         Debug.Log($"[KillerController] 연기자 내려놓기: {actorObj.name}");
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_PlayPutDown()
+    {
+        if (anim != null)
+            anim.SetTrigger("PutDown");
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]

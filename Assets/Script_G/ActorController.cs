@@ -275,6 +275,21 @@ public class ActorController : NetworkBehaviour
     }
 
     [Rpc(RpcSources.All, RpcTargets.All)]
+    public void RPC_PlayBeingPickedUp()
+    {
+        if (anim != null)
+            anim.SetTrigger("BeingPickedUp");
+        Debug.Log("[ActorController] 들리는 애니메이션 재생");
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.All)]
+    public void RPC_PlayBeingPutDown()
+    {
+        if (anim != null)
+            anim.SetTrigger("BeingPutDown");
+        Debug.Log("[ActorController] 내려지는 애니메이션 재생");
+    }
+    [Rpc(RpcSources.All, RpcTargets.All)]
     public void RPC_PlayEmotion(string trigger)
     {
         if (anim != null && !string.IsNullOrEmpty(trigger))
