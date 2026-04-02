@@ -32,6 +32,9 @@ public class KillerController : NetworkBehaviour
     [Header("Light")]
     public Light killerLight;
 
+    [Header("Carry")]
+    [SerializeField] public Vector3 carryOffset = new Vector3(0f, 0.5f, 0.8f);
+
     [Networked] private float NetYaw { get; set; }
     [Networked] private float NetPitch { get; set; }
     [Networked] private float YVelocity { get; set; }
@@ -41,20 +44,23 @@ public class KillerController : NetworkBehaviour
     [Networked] private TickTimer AttackLockTimer { get; set; }
 
     [Networked] private NetworkBool NetLightOn { get; set; }
+    [Networked] private NetworkBool NetIsCarrying { get; set; }
 
     [Networked] private NetworkBool NetIsMoving { get; set; }
     [Networked] private NetworkBool NetIsWalking { get; set; }
     [Networked] private NetworkBool NetDoAttack { get; set; }
-    [Networked] private NetworkString<_32> NetAttackTrigger { get; set; } // 무기별 공격 트리거
+    [Networked] private NetworkString<_32> NetAttackTrigger { get; set; }
 
     private static readonly int IsMovingHash = Animator.StringToHash("IsMoving");
     private static readonly int IsWalkingHash = Animator.StringToHash("IsWalking");
+    private static readonly int IsCarryingHash = Animator.StringToHash("IsCarrying");
 
     private float localFreezeTimer = 0f;
     private bool isFrozen = true;
     private bool lastAttackState = false;
     private CharacterController cc;
     private Animator anim;
+    private ActorController carriedActorRef = null;
 
     private void Awake()
     {
@@ -80,7 +86,7 @@ public class KillerController : NetworkBehaviour
             isFrozen = true;
             localFreezeTimer = 0f;
             NetLightOn = true;
-            NetAttackTrigger = "Attack"; // 기본 트리거
+            NetAttackTrigger = "Attack";
         }
         else
         {
@@ -117,8 +123,8 @@ public class KillerController : NetworkBehaviour
 
         anim.SetBool(IsMovingHash, NetIsMoving);
         anim.SetBool(IsWalkingHash, NetIsWalking);
+        anim.SetBool(IsCarryingHash, NetIsCarrying);
 
-        // 공격 트리거: false→true 엣지에서만 발동, 무기별 트리거 사용
         if (NetDoAttack && !lastAttackState)
         {
             string trigger = NetAttackTrigger.ToString();
@@ -126,7 +132,6 @@ public class KillerController : NetworkBehaviour
                 anim.SetTrigger(trigger);
         }
 
-        // 공격 끝나면 트리거 리셋
         if (!NetDoAttack && lastAttackState)
         {
             string trigger = NetAttackTrigger.ToString();
@@ -150,12 +155,10 @@ public class KillerController : NetworkBehaviour
         NetLightOn = on;
     }
 
-    // 무기별 공격 트리거 설정 (서버에서 호출)
     public void SetAttackTrigger(string trigger)
     {
         if (!HasStateAuthority) return;
         NetAttackTrigger = trigger;
-        Debug.Log($"[KillerController] 공격 트리거 설정: {trigger}");
     }
 
     public override void FixedUpdateNetwork()
@@ -167,6 +170,15 @@ public class KillerController : NetworkBehaviour
         HandleLook(input);
         HandleAttack(input);
         MoveAndAnimate(input);
+
+        // 들고 있는 연기자 위치 서버에서 업데이트
+        if (NetIsCarrying && carriedActorRef != null)
+        {
+            var actorCc = carriedActorRef.GetComponent<CharacterController>();
+            if (actorCc != null) actorCc.enabled = false;
+            carriedActorRef.transform.position = transform.position + transform.TransformDirection(carryOffset);
+            carriedActorRef.transform.rotation = transform.rotation;
+        }
     }
 
     private void LateUpdate()
@@ -222,7 +234,7 @@ public class KillerController : NetworkBehaviour
 
         Vector3 inputDir = new Vector3(input.move.x, 0f, input.move.y).normalized;
         bool isMoving = inputDir.sqrMagnitude > 0.001f;
-        bool isWalking = isMoving && input.buttons.IsSet(PlayerNetworkInput.WALK); // Shift: 느린 걷기
+        bool isWalking = isMoving && input.buttons.IsSet(PlayerNetworkInput.WALK);
 
         float speed = isWalking ? walkSpeed : runSpeed;
         Vector3 moveDir = (transform.forward * inputDir.z + transform.right * inputDir.x).normalized;
@@ -253,7 +265,54 @@ public class KillerController : NetworkBehaviour
             follower = weaponObj.gameObject.AddComponent<WeaponFollower>();
 
         follower.target = FindBoneRecursive(transform, "hand.R");
-        Debug.Log($"[KillerController] RPC_EquipWeapon | target={follower.target?.name}");
+    }
+
+    // ─── 들기/내려놓기 RPC ──────────────────────
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void RPC_StartCarry(NetworkId actorId)
+    {
+        if (!Runner.TryFindObject(actorId, out var actorObj)) return;
+        var actor = actorObj.GetComponent<ActorController>();
+        if (actor == null) return;
+
+        NetIsCarrying = true;
+        actor.IsCarried = true;
+        actor.NetIsCarried = true;
+        carriedActorRef = actor;
+
+        var actorCc = actor.GetComponent<CharacterController>();
+        if (actorCc != null) actorCc.enabled = false;
+
+        RPC_SyncCarry(actorId, true);
+        Debug.Log($"[KillerController] 연기자 들기: {actorObj.name}");
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void RPC_StopCarry(NetworkId actorId)
+    {
+        if (!Runner.TryFindObject(actorId, out var actorObj)) return;
+        var actor = actorObj.GetComponent<ActorController>();
+        if (actor == null) return;
+
+        NetIsCarrying = false;
+        actor.IsCarried = false;
+        actor.NetIsCarried = false;
+        carriedActorRef = null;
+
+        var actorCc = actor.GetComponent<CharacterController>();
+        if (actorCc != null) actorCc.enabled = true;
+
+        RPC_SyncCarry(actorId, false);
+        Debug.Log($"[KillerController] 연기자 내려놓기: {actorObj.name}");
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_SyncCarry(NetworkId actorId, bool carrying)
+    {
+        NetIsCarrying = carrying;
+        if (!Runner.TryFindObject(actorId, out var actorObj)) return;
+        var actor = actorObj.GetComponent<ActorController>();
+        if (actor != null) actor.NetIsCarried = carrying;
     }
 
     private Transform FindBoneRecursive(Transform parent, string boneName)

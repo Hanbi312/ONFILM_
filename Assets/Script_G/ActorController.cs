@@ -34,13 +34,15 @@ public class ActorController : NetworkBehaviour
     public float defaultHealth = 2f;
 
     [Header("Light")]
-    public Light actorLight; // Inspector에서 라이트 연결
+    public Light actorLight;
 
     [Networked] public float Health { get; set; }
     [Networked] public NetworkBool IsDead { get; set; }
     [Networked] public NetworkBool SelfHeal { get; set; }
     [Networked] public float SelfHealTime { get; set; }
     [Networked] public NetworkBool IsInjury { get; set; }
+    [Networked] public NetworkBool IsCarried { get; set; }     // 악역에게 들린 상태
+    [Networked] public NetworkBool NetIsCarried { get; set; }  // 들린 애니메이션용
 
     [Networked] private float NetYaw { get; set; }
     [Networked] private float NetPitch { get; set; }
@@ -63,6 +65,7 @@ public class ActorController : NetworkBehaviour
     private static readonly int IsInjuryHash = Animator.StringToHash("IsInjury");
     private static readonly int HitHash = Animator.StringToHash("Hit");
     private static readonly int DeathHash = Animator.StringToHash("Death");
+    private static readonly int IsCarriedHash = Animator.StringToHash("IsCarried");
 
     private float localFreezeTimer = 0f;
     private bool isFrozen = true;
@@ -129,8 +132,6 @@ public class ActorController : NetworkBehaviour
         if (anim == null) return;
         if (Object == null || !Object.IsValid) return;
 
-        // IsDead여도 애니메이션은 계속 재생 (사망 애니메이션 재생을 위해)
-        // 단 사망 후 Death_Idle 상태에서 움직이지 않을 때만 speed = 0
         bool isDeadAndStill = IsDead && !NetIsMoving && anim.GetCurrentAnimatorStateInfo(0).IsName("Death_Idle");
         anim.speed = isDeadAndStill ? 0f : 1f;
 
@@ -141,6 +142,7 @@ public class ActorController : NetworkBehaviour
         anim.SetBool(IsRecoveringHash, NetIsRecovering);
         anim.SetBool(IsVaultingHash, NetIsVaulting);
         anim.SetBool(IsInjuryHash, NetIsInjury);
+        anim.SetBool(IsCarriedHash, NetIsCarried);
     }
 
     private void ApplyLight()
@@ -255,19 +257,13 @@ public class ActorController : NetworkBehaviour
         if (!HasStateAuthority) return;
         if (other.CompareTag("weapon"))
         {
-            bool wasInjury = IsInjury; // 공격 받기 전 부상 상태 체크
+            bool wasInjury = IsInjury;
             Health -= 1f;
 
             if (wasInjury && Health <= 0f)
-            {
-                // 부상 상태에서 한 번 더 맞으면 사망 + 쓰러지는 애니메이션
                 RPC_PlayDeath();
-            }
             else
-            {
-                // 첫 번째 공격 = 피격 애니메이션
                 RPC_PlayHit();
-            }
         }
         if (other.CompareTag("wall")) crashWall = true;
     }
@@ -283,7 +279,6 @@ public class ActorController : NetworkBehaviour
     {
         if (anim != null && !string.IsNullOrEmpty(trigger))
             anim.SetTrigger(trigger);
-        Debug.Log($"[ActorController] 감정 애니메이션 재생: {trigger}");
     }
 
     [Rpc(RpcSources.All, RpcTargets.All)]
@@ -292,7 +287,6 @@ public class ActorController : NetworkBehaviour
         if (anim == null) return;
         anim.ResetTrigger("Hit");
         anim.Play("Breathing Idle");
-        Debug.Log("[ActorController] Idle 복귀");
     }
 
     [Rpc(RpcSources.All, RpcTargets.All)]
@@ -300,7 +294,6 @@ public class ActorController : NetworkBehaviour
     {
         if (anim != null)
             anim.SetTrigger("Fail");
-        Debug.Log("[ActorController] 실패 애니메이션 재생");
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -315,7 +308,6 @@ public class ActorController : NetworkBehaviour
     {
         if (anim != null)
             anim.SetTrigger("Death");
-        Debug.Log("[ActorController] 사망 애니메이션 재생");
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -335,16 +327,8 @@ public class ActorController : NetworkBehaviour
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void RPC_TurnOffCamera(NetworkId cameraId)
     {
-        Debug.Log($"[ActorController] RPC_TurnOffCamera 수신 | cameraId={cameraId}");
         if (Runner.TryFindObject(cameraId, out var obj))
-        {
-            Debug.Log($"[ActorController] 카메라 오브젝트 찾음: {obj.name}");
             obj.GetComponent<SecurityCamera>()?.TurnOff();
-        }
-        else
-        {
-            Debug.LogError($"[ActorController] 카메라 오브젝트 못 찾음! cameraId={cameraId}");
-        }
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]

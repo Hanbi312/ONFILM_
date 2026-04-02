@@ -63,6 +63,16 @@ public class PoseGame : MonoBehaviour
         SetupKeywords();
     }
 
+    // VillainCamera용 오버로드
+    public void SetupMiniGame(VillainCamera cam, System.Action<string> successCallback = null, System.Action failCallback = null)
+    {
+        securityCamera = null;
+        generator = null;
+        onSuccess = successCallback;
+        onFail = failCallback;
+        SetupKeywords();
+    }
+
     private void SetupKeywords()
     {
         selectedDatas.Clear();
