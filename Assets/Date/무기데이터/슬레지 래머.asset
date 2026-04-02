@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 566a15cf6c81b7c45b28f85726729818, type: 3}
+  m_Name: "\uC2AC\uB808\uC9C0 \uB798\uBA38"
+  m_EditorClassIdentifier: 
+  weaponName: "\uC2AC\uB808\uC9C0 \uD574\uBA38"
+  icon: {fileID: 21300000, guid: 5db91eb37164c00429c9c88b8b19613f, type: 3}
+  category: 3
+  range: 1.5
+  castDelay: 0.2
+  successDelay: 2
+  failDelay: 2
+  modelPrefab: {fileID: 6323857215506297871, guid: 1961dfea264170547bf8f98b05692b78, type: 3}
+  attackAnimTrigger: Attack_Long
