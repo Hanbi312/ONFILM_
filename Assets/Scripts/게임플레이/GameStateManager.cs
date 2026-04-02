@@ -31,6 +31,7 @@ public class GameStateManager : NetworkBehaviour
     [Networked] public int CameraOffCount { get; set; }
     [Networked] public NetworkBool IsDoorActivated { get; set; }
     [Networked] public NetworkBool IsGameClear { get; set; }
+    [Networked] public int TragedyPoint { get; set; } // 비극 포인트
 
     private float doorProgress = 0f;
     private ActorController localActor;
@@ -133,6 +134,13 @@ public class GameStateManager : NetworkBehaviour
         if (!HasStateAuthority) return;
         HasScript = true;
         Debug.Log("[GameStateManager] 각본 획득");
+    }
+
+    public void AddTragedyPoint()
+    {
+        if (!HasStateAuthority) return;
+        TragedyPoint++;
+        Debug.Log($"[GameStateManager] 비극 포인트 +1 | 총 {TragedyPoint}포인트");
     }
 
     public void OnCameraOff()

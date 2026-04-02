@@ -20,7 +20,7 @@ public class GameplayManager : MonoBehaviour
     [SerializeField] private NetworkObject defaultVillainPrefab;
 
     [Header("스폰 포인트")]
-    [SerializeField] private Transform actorSpawnPoint;
+    public Transform actorSpawnPoint;
     [SerializeField] private Transform villainSpawnPoint;
 
     [Header("스폰 튜닝")]

@@ -106,8 +106,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   target: {fileID: 0}
-  positionOffset: {x: 0, y: 0, z: 0}
-  rotationOffset: {x: 0, y: 0, z: 0}
+  positionOffset: {x: 0.07, y: 0.075, z: -0.1}
+  rotationOffset: {x: -14.46, y: -21.6, z: -10.92}
 --- !u!64 &5320197194285412317
 MeshCollider:
   m_ObjectHideFlags: 0
