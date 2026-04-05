@@ -10,8 +10,8 @@ public class ProgressBar : MonoBehaviour
 
     private float currentGage;
     Generator generator;
-    // ★ SecurityCamera도 지원
     SecurityCamera securityCamera;
+    VillainCamera villainCamera;
 
     void Start()
     {
@@ -22,20 +22,22 @@ public class ProgressBar : MonoBehaviour
 
     void Update()
     {
-        // ★ SecurityCamera가 연결됐으면 그 actPoint 사용
-        if (securityCamera != null)
+        if (villainCamera != null)
         {
-            currentGage = securityCamera.actPoint;
-            currentGage = Mathf.Clamp(currentGage, 0f, maxGage);
+            currentGage = Mathf.Clamp(villainCamera.actPoint, 0f, maxGage);
             UpdateGauge();
             return;
         }
 
-        if (generator == null)
+        if (securityCamera != null)
+        {
+            currentGage = Mathf.Clamp(securityCamera.actPoint, 0f, maxGage);
+            UpdateGauge();
             return;
+        }
 
-        currentGage = generator.actPoint;
-        currentGage = Mathf.Clamp(currentGage, 0f, maxGage);
+        if (generator == null) return;
+        currentGage = Mathf.Clamp(generator.actPoint, 0f, maxGage);
         UpdateGauge();
     }
 
@@ -51,11 +53,17 @@ public class ProgressBar : MonoBehaviour
             progressBar.value = ratio;
     }
 
-    // ★ SecurityCamera에서 호출해서 연결
     public void SetSecurityCamera(SecurityCamera cam)
     {
         securityCamera = cam;
-        if (cam != null)
-            maxGage = cam.maxActPoint; // maxGage를 카메라 설정과 동기화
+        villainCamera = null;
+        if (cam != null) maxGage = cam.maxActPoint;
+    }
+
+    public void SetVillainCamera(VillainCamera cam)
+    {
+        villainCamera = cam;
+        securityCamera = null;
+        if (cam != null) maxGage = cam.maxActPoint;
     }
 }

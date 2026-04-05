@@ -41,8 +41,9 @@ public class ActorController : NetworkBehaviour
     [Networked] public NetworkBool SelfHeal { get; set; }
     [Networked] public float SelfHealTime { get; set; }
     [Networked] public NetworkBool IsInjury { get; set; }
-    [Networked] public NetworkBool IsCarried { get; set; }     // 악역에게 들린 상태
-    [Networked] public NetworkBool NetIsCarried { get; set; }  // 들린 애니메이션용
+    [Networked] public NetworkBool IsCarried { get; set; }
+    [Networked] public NetworkBool NetIsCarried { get; set; }
+    [Networked] public NetworkBool IsLockedByVillain { get; set; } // 악역 카메라 미니게임 중 이동 잠금
 
     [Networked] private float NetYaw { get; set; }
     [Networked] private float NetPitch { get; set; }
@@ -64,7 +65,6 @@ public class ActorController : NetworkBehaviour
     private static readonly int IsVaultingHash = Animator.StringToHash("IsVaulting");
     private static readonly int IsInjuryHash = Animator.StringToHash("IsInjury");
     private static readonly int HitHash = Animator.StringToHash("Hit");
-    private static readonly int DeathHash = Animator.StringToHash("Death");
     private static readonly int IsCarriedHash = Animator.StringToHash("IsCarried");
 
     private float localFreezeTimer = 0f;
@@ -187,6 +187,15 @@ public class ActorController : NetworkBehaviour
     {
         if (cc == null || !cc.enabled) return;
 
+        // 악역 카메라 미니게임 중 이동 잠금
+        if (IsLockedByVillain)
+        {
+            NetIsMoving = false;
+            NetIsWalking = false;
+            NetIsSitting = false;
+            return;
+        }
+
         Vector3 inputDir = new Vector3(input.move.x, 0f, input.move.y).normalized;
 
         bool runPressed = input.buttons.IsSet(PlayerNetworkInput.WALK);
@@ -279,7 +288,6 @@ public class ActorController : NetworkBehaviour
     {
         if (anim != null)
             anim.SetTrigger("BeingPickedUp");
-        Debug.Log("[ActorController] 들리는 애니메이션 재생");
     }
 
     [Rpc(RpcSources.All, RpcTargets.All)]
@@ -287,8 +295,8 @@ public class ActorController : NetworkBehaviour
     {
         if (anim != null)
             anim.SetTrigger("BeingPutDown");
-        Debug.Log("[ActorController] 내려지는 애니메이션 재생");
     }
+
     [Rpc(RpcSources.All, RpcTargets.All)]
     public void RPC_PlayEmotion(string trigger)
     {
@@ -344,6 +352,30 @@ public class ActorController : NetworkBehaviour
     {
         if (Runner.TryFindObject(cameraId, out var obj))
             obj.GetComponent<SecurityCamera>()?.TurnOff();
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void RPC_Respawn(Vector3 position, Quaternion rotation)
+    {
+        // 체력 초기화
+        Health = defaultHealth;
+        IsDead = false;
+        IsInjury = false;
+        IsCarried = false;
+        NetIsCarried = false;
+        IsLockedByVillain = false;
+        SelfHeal = false;
+        SelfHealTime = 0f;
+
+        // 위치 이동
+        if (cc != null) cc.enabled = false;
+        transform.position = position;
+        transform.rotation = rotation;
+        NetYaw = rotation.eulerAngles.y;
+        YVelocity = 0f;
+        if (cc != null) cc.enabled = true;
+
+        Debug.Log($"[ActorController] 리스폰 완료: {position} | 체력={Health}");
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]

@@ -179,6 +179,13 @@ public class KillerController : NetworkBehaviour
             carriedActorRef.transform.position = transform.position + transform.TransformDirection(carryOffset);
             carriedActorRef.transform.rotation = transform.rotation;
         }
+        else if (!NetIsCarrying && carriedActorRef != null)
+        {
+            // 내려놓은 후 CC 확실히 활성화
+            var actorCc = carriedActorRef.GetComponent<CharacterController>();
+            if (actorCc != null) actorCc.enabled = true;
+            carriedActorRef = null;
+        }
     }
 
     private void LateUpdate()
@@ -284,7 +291,8 @@ public class KillerController : NetworkBehaviour
         if (actorCc != null) actorCc.enabled = false;
 
         RPC_SyncCarry(actorId, true);
-        RPC_PlayPickup(); // 들어올리는 애니메이션 트리거
+        RPC_PlayPickup();
+        actor.RPC_PlayBeingPickedUp(); // 연기자 들리는 애니메이션
         Debug.Log($"[KillerController] 연기자 들기: {actorObj.name}");
     }
 
@@ -311,7 +319,8 @@ public class KillerController : NetworkBehaviour
         if (actorCc != null) actorCc.enabled = true;
 
         RPC_SyncCarry(actorId, false);
-        RPC_PlayPutDown(); // 내려놓는 애니메이션 트리거
+        RPC_PlayPutDown();
+        actor.RPC_PlayBeingPutDown(); // 연기자 내려지는 애니메이션
         Debug.Log($"[KillerController] 연기자 내려놓기: {actorObj.name}");
     }
 

@@ -72,4 +72,11 @@ public class MiniGameManager : MonoBehaviour
         if (progressBarScript != null)
             progressBarScript.SetSecurityCamera(cam);
     }
+
+    // VillainCamera 연결
+    public void RegisterVillainCamera(VillainCamera cam)
+    {
+        if (progressBarScript != null)
+            progressBarScript.SetVillainCamera(cam);
+    }
 }

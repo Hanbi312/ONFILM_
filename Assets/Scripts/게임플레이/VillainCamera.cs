@@ -3,8 +3,7 @@ using UnityEngine;
 
 /// <summary>
 /// VillainCamera - 악역용 카메라
-/// 악역이 연기자를 들고 다가가면 F 힌트 표시
-/// F 누르면 연기자를 spawnPoint로 보내고 악역 미니게임 시작
+/// NetworkBehaviour로 isMiniGameActive 네트워크 동기화
 /// </summary>
 public class VillainCamera : NetworkBehaviour
 {
@@ -15,23 +14,51 @@ public class VillainCamera : NetworkBehaviour
     public float interactRange = 2f;
 
     [Header("미니게임 설정")]
-    public float minTriggerTime = 2f;
-    public float maxTriggerTime = 5f;
     public float actSpeed = 1f;
     public float maxActPoint = 10f;
 
-    // 미니게임 상태
+    // [Networked]로 모든 클라이언트에 동기화
+    [Networked] public NetworkBool IsMiniGameActiveNet { get; set; }
+
+    // 로컬 상태
     public float actPoint = 0f;
     public float miniGameTime = 0f;
-    public bool isMiniGameActive = false;
     public PoseGame poseGameScript;
+
+    // 기존 코드와 호환을 위한 프로퍼티
+    public bool isMiniGameActive
+    {
+        get => IsMiniGameActiveNet;
+        set
+        {
+            if (HasStateAuthority)
+                IsMiniGameActiveNet = value;
+        }
+    }
 
     public void EndMiniGame()
     {
-        isMiniGameActive = false;
+        if (HasStateAuthority)
+            IsMiniGameActiveNet = false;
         miniGameTime = 0f;
-        MiniGameManager.Instance?.HideMiniGame();
+        MiniGameManager.Instance?.HideAll();
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void RPC_StartMiniGame()
+    {
+        IsMiniGameActiveNet = true;
+        actPoint = 0f;
+        Debug.Log("[VillainCamera] 미니게임 시작 - 모든 클라이언트에 동기화");
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void RPC_StopMiniGame()
+    {
+        IsMiniGameActiveNet = false;
+        actPoint = 0f;
+        Debug.Log("[VillainCamera] 미니게임 종료 - 모든 클라이언트에 동기화");
     }
 }
