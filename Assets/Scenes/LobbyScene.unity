@@ -705,8 +705,8 @@ MonoBehaviour:
   networkPlayerPrefab: {fileID: 3150878334306061863, guid: a3f9612ffcc15fc44b12c562758b2426, type: 3}
   maxVillainCount: 1
   maxActorCount: 1
-  characterSelectSceneBuildIndex: 2
-  gameplaySceneBuildIndex: 3
+  characterSelectSceneBuildIndex: 3
+  gameplaySceneBuildIndex: 4
 --- !u!4 &421607916
 Transform:
   m_ObjectHideFlags: 0
