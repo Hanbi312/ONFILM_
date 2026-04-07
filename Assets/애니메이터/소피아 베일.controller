@@ -368,6 +368,9 @@ AnimatorStateTransition:
   - m_ConditionMode: 1
     m_ConditionEvent: BeingPickedUp
     m_EventTreshold: 0
+  - m_ConditionMode: 1
+    m_ConditionEvent: IsDead
+    m_EventTreshold: 0
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 5000572400978190157}
   m_Solo: 0

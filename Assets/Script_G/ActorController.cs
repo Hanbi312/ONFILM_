@@ -375,7 +375,19 @@ public class ActorController : NetworkBehaviour
         YVelocity = 0f;
         if (cc != null) cc.enabled = true;
 
+        // 모든 클라이언트에 Idle 복귀
+        RPC_RespawnAnimation();
+
         Debug.Log($"[ActorController] 리스폰 완료: {position} | 체력={Health}");
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_RespawnAnimation()
+    {
+        if (anim == null) return;
+        anim.Rebind();        // 모든 파라미터 초기화
+        anim.Update(0f);      // 즉시 반영
+        anim.Play("Breathing Idle");
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
