@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: "\uB9AC\uC554 \uCE74\uD130"
   m_EditorClassIdentifier: 
   characterName: "\uB9AC\uC554 \uCE74\uD130"
-  portrait: {fileID: 21300000, guid: d6e0022f6c4bad340b8233b3e2eb87d9, type: 3}
-  previewImage: {fileID: 0}
+  portrait: {fileID: 21300000, guid: 4ad8a47d60a3c3142b49297592c4e325, type: 3}
+  previewImage: {fileID: 21300000, guid: 93858732eada47b4291a82d017e45b07, type: 3}
   modelPrefab: {fileID: 8877824318928579577, guid: b4fd7b751db26c047995a19eaf623644, type: 3}
   role: 1
   description: 
