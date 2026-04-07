@@ -155,7 +155,7 @@ public class GameStateManager : NetworkBehaviour
         }
     }
 
-    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
     private void RPC_GameClear()
     {
         if (IsGameClear) return;

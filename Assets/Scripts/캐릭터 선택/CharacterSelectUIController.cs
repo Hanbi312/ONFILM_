@@ -241,20 +241,18 @@ public class CharacterSelectUIController : MonoBehaviour
     {
         currentTab = tab;
         ClearGrid();
-
-        // 탭 전환해도 이미 선택한 캐릭터/무기는 유지
-        // selectButton은 둘 다 선택됐을 때만 활성화
-        RefreshSelectButton();
-
+        pendingCharacter = null;
+        selectButton.interactable = false;
         if (selectButtonText != null) selectButtonText.text = "선택하기";
 
-        ClearPreview();
+        ClearPreview(); // 3D 모델 초기화
 
         if (weaponInfoPanel != null)
             weaponInfoPanel.SetActive(false);
 
         if (tab == Tab.Weapon)
         {
+            // 무기 탭: SelectPanel은 그대로 두고 WeaponPanel을 위에 오버레이로 표시
             if (weaponPanel != null)
             {
                 weaponPanel.SetActive(true);
@@ -263,6 +261,7 @@ public class CharacterSelectUIController : MonoBehaviour
         }
         else
         {
+            // 연기자/악역 탭: WeaponPanel 닫기
             if (weaponPanel != null) weaponPanel.SetActive(false);
             if (gridContent != null) gridContent.gameObject.SetActive(true);
 
@@ -446,7 +445,7 @@ public class CharacterSelectUIController : MonoBehaviour
         if (myRole == MatchRole.Villain)
         {
             pendingWeapon = data;
-            RefreshSelectButton();
+            selectButton.interactable = true;
             if (selectButtonText != null) selectButtonText.text = "선택하기";
         }
     }
@@ -483,41 +482,25 @@ public class CharacterSelectUIController : MonoBehaviour
     // ═══════════════════════════════════════════════════════════
     private void OnClickSelect()
     {
-        bool changed = false;
-
-        if (pendingWeapon != null)
+        if (currentTab == Tab.Weapon && pendingWeapon != null)
         {
             CharacterSelectSession.Instance?.SetWeapon(pendingWeapon);
             Debug.Log($"[CharacterSelectUI] 무기 확정: {pendingWeapon.weaponName}");
-            changed = true;
-        }
 
-        if (pendingCharacter != null)
+            if (selectButtonText != null)
+                selectButtonText.text = "선택완료";
+        }
+        else if (pendingCharacter != null)
         {
             CharacterSelectSession.Instance?.SetCharacter(pendingCharacter);
             Debug.Log($"[CharacterSelectUI] 캐릭터 확정: {pendingCharacter.characterName}");
-            changed = true;
-        }
 
-        if (changed)
-        {
             if (selectButtonText != null)
                 selectButtonText.text = "선택완료";
-            SendSelectionRPC();
         }
-    }
 
-    // 선택하기 버튼 활성화 갱신
-    // 악역: 캐릭터 또는 무기 중 하나라도 pending이면 활성화
-    // 연기자: 캐릭터 pending이면 활성화
-    private void RefreshSelectButton()
-    {
-        if (selectButton == null) return;
-
-        if (myRole == MatchRole.Villain)
-            selectButton.interactable = pendingCharacter != null || pendingWeapon != null;
-        else
-            selectButton.interactable = pendingCharacter != null;
+        // 선택 결과를 즉시 서버에 전송 → 상대방 화면에 초상화 표시
+        SendSelectionRPC();
     }
 
     // 뒤로가기 버튼 - 선택 화면 → 대기 화면으로 복귀
