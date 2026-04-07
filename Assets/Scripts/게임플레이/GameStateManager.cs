@@ -1,12 +1,10 @@
 using System.Collections;
 using Fusion;
 using UnityEngine;
-using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
 /// GameStateManager - 게임 전체 상태 관리
-/// 각본 획득, 카메라 꺼짐 카운트, 문 활성화, 게임 클리어
 /// </summary>
 public class GameStateManager : NetworkBehaviour
 {
@@ -20,9 +18,7 @@ public class GameStateManager : NetworkBehaviour
     [SerializeField] private GameObject exitDoor;
     [SerializeField] private float doorInteractRange = 2f;
     [SerializeField] private float doorInteractTime = 3f;
-
-    [Header("문 진행도 UI")]
-    [SerializeField] private Slider doorProgressBar;
+    [SerializeField] private Animator[] doorAnimators;
 
     [Header("게임 설정")]
     [SerializeField] private int requiredCameraOffCount = 4;
@@ -31,9 +27,10 @@ public class GameStateManager : NetworkBehaviour
     [Networked] public int CameraOffCount { get; set; }
     [Networked] public NetworkBool IsDoorActivated { get; set; }
     [Networked] public NetworkBool IsGameClear { get; set; }
-    [Networked] public int TragedyPoint { get; set; } // 비극 포인트
+    [Networked] public int TragedyPoint { get; set; }
 
     private float doorProgress = 0f;
+    private bool isOpeningDoor = false;
     private ActorController localActor;
 
     private void Awake()
@@ -46,12 +43,10 @@ public class GameStateManager : NetworkBehaviour
     {
         if (exitDoor != null) exitDoor.SetActive(false);
         if (fKeyHint != null) fKeyHint.SetActive(false);
-        if (doorProgressBar != null) doorProgressBar.gameObject.SetActive(false);
     }
 
     public override void Render()
     {
-        // 문 활성화 동기화
         if (exitDoor != null)
             exitDoor.SetActive(IsDoorActivated);
     }
@@ -78,18 +73,27 @@ public class GameStateManager : NetworkBehaviour
         if (inRange && Input.GetKey(KeyCode.F))
         {
             doorProgress += Time.deltaTime;
+            Debug.Log($"[GameStateManager] 문 진행도: {doorProgress:F1}/{doorInteractTime}");
 
-            if (doorProgressBar != null)
+            if (!isOpeningDoor)
             {
-                doorProgressBar.gameObject.SetActive(true);
-                doorProgressBar.value = doorProgress / doorInteractTime;
+                isOpeningDoor = true;
+                localActor.RPC_PlayEmotion("OpenDoor");
             }
 
             if (doorProgress >= doorInteractTime)
+            {
+                Debug.Log("[GameStateManager] 게이지 완료 - RPC_GameClear 호출!");
                 RPC_GameClear();
+            }
         }
         else if (!Input.GetKey(KeyCode.F))
         {
+            if (isOpeningDoor)
+            {
+                isOpeningDoor = false;
+                localActor.RPC_ReturnToIdle();
+            }
             ResetDoorProgress();
         }
     }
@@ -97,11 +101,6 @@ public class GameStateManager : NetworkBehaviour
     private void ResetDoorProgress()
     {
         doorProgress = 0f;
-        if (doorProgressBar != null)
-        {
-            doorProgressBar.value = 0f;
-            doorProgressBar.gameObject.SetActive(false);
-        }
     }
 
     private void FindLocalActor()
@@ -168,6 +167,28 @@ public class GameStateManager : NetworkBehaviour
     private void RPC_OnGameClear()
     {
         Debug.Log("[GameStateManager] 게임 클리어!");
+
+        if (doorAnimators != null && doorAnimators.Length > 0)
+        {
+            Debug.Log($"[GameStateManager] 문 Animator 수: {doorAnimators.Length}");
+            foreach (var anim in doorAnimators)
+            {
+                if (anim != null)
+                {
+                    anim.SetTrigger("Open");
+                    Debug.Log($"[GameStateManager] Open 트리거 발동: {anim.gameObject.name}");
+                }
+                else
+                {
+                    Debug.LogError("[GameStateManager] doorAnimators 배열에 null 있음!");
+                }
+            }
+        }
+        else
+        {
+            Debug.LogError("[GameStateManager] doorAnimators 배열이 비어있음! Inspector에서 연결 필요");
+        }
+
         StartCoroutine(GameClearRoutine());
     }
 

@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 566a15cf6c81b7c45b28f85726729818, type: 3}
   m_Name: "\uB2E8\uAC80"
   m_EditorClassIdentifier: 
-  weaponName: "\uB2E8\uAC80."
+  weaponName: "\uB2E8\uAC80"
   icon: {fileID: 21300000, guid: eb90365c835ad7940b80d7bbf10743d3, type: 3}
   category: 0
   range: 0.5

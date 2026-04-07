@@ -1,5 +1,4 @@
-﻿
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -23,8 +22,8 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
     [SerializeField] private int maxActorCount = 1;
 
     [Header("Scene Setting")]
-    [SerializeField] private int characterSelectSceneBuildIndex = 2;
-    [SerializeField] private int gameplaySceneBuildIndex = 3;
+    [SerializeField] private int characterSelectSceneBuildIndex = 3;
+    [SerializeField] private int gameplaySceneBuildIndex = 4;
 
     private int currentVillainCount = 0;
     private int currentActorCount = 0;
