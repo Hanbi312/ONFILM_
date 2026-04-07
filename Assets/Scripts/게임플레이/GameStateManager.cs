@@ -20,6 +20,7 @@ public class GameStateManager : NetworkBehaviour
     [SerializeField] private GameObject exitDoor;
     [SerializeField] private float doorInteractRange = 2f;
     [SerializeField] private float doorInteractTime = 3f;
+    [SerializeField] private Animator doorAnimator; // 문 Animator
 
     [Header("문 진행도 UI")]
     [SerializeField] private Slider doorProgressBar;
@@ -34,6 +35,7 @@ public class GameStateManager : NetworkBehaviour
     [Networked] public int TragedyPoint { get; set; } // 비극 포인트
 
     private float doorProgress = 0f;
+    private bool isOpeningDoor = false;
     private ActorController localActor;
 
     private void Awake()
@@ -79,6 +81,13 @@ public class GameStateManager : NetworkBehaviour
         {
             doorProgress += Time.deltaTime;
 
+            // 문 여는 중 연기자 애니메이션
+            if (!isOpeningDoor)
+            {
+                isOpeningDoor = true;
+                localActor.RPC_PlayEmotion("OpenDoor");
+            }
+
             if (doorProgressBar != null)
             {
                 doorProgressBar.gameObject.SetActive(true);
@@ -90,6 +99,11 @@ public class GameStateManager : NetworkBehaviour
         }
         else if (!Input.GetKey(KeyCode.F))
         {
+            if (isOpeningDoor)
+            {
+                isOpeningDoor = false;
+                localActor.RPC_ReturnToIdle();
+            }
             ResetDoorProgress();
         }
     }
@@ -168,6 +182,11 @@ public class GameStateManager : NetworkBehaviour
     private void RPC_OnGameClear()
     {
         Debug.Log("[GameStateManager] 게임 클리어!");
+
+        // 문 열리는 애니메이션
+        if (doorAnimator != null)
+            doorAnimator.SetTrigger("Open");
+
         StartCoroutine(GameClearRoutine());
     }
 
