@@ -282,6 +282,9 @@ public class KillerController : NetworkBehaviour
         var actor = actorObj.GetComponent<ActorController>();
         if (actor == null) return;
 
+        // 사망 상태가 아니면 들 수 없음
+        if (!actor.IsDead) return;
+
         NetIsCarrying = true;
         actor.IsCarried = true;
         actor.NetIsCarried = true;
@@ -292,7 +295,7 @@ public class KillerController : NetworkBehaviour
 
         RPC_SyncCarry(actorId, true);
         RPC_PlayPickup();
-        actor.RPC_PlayBeingPickedUp(); // 연기자 들리는 애니메이션
+        actor.RPC_PlayBeingPickedUp();
         Debug.Log($"[KillerController] 연기자 들기: {actorObj.name}");
     }
 
