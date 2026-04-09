@@ -9449,8 +9449,8 @@ MonoBehaviour:
   - {fileID: 510911799}
   - {fileID: 510911800}
   - {fileID: 670294249}
-  requiredCameraOffCount: 3
-  requiredTragedyPoint: 3
+  requiredCameraOffCount: 4
+  requiredTragedyPoint: 4
   _HasScript:
     _value: 0
   _CameraOffCount: 0
