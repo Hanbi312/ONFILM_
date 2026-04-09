@@ -2872,6 +2872,92 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 2.1941512, y: 0.4413872, z: 0.871642}
   m_Center: {x: 0.8759875, y: -0.28800222, z: 0.053086735}
+--- !u!1 &255106428
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 255106430}
+  - component: {fileID: 255106429}
+  m_Layer: 0
+  m_Name: SoundManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &255106429
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 255106428}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e99ecd1a16424f640a1892fa46ce6b41, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  sounds:
+  - soundName: actStart
+    clip: {fileID: 8300000, guid: 0dea6719e1f767c44aae0ad73519cf3e, type: 3}
+  - soundName: actEnd
+    clip: {fileID: 8300000, guid: 3d2a16134d0e53a4cb469428a0012ec2, type: 3}
+  - soundName: actFailCam
+    clip: {fileID: 8300000, guid: e9e40fea6e51dad4a9ecf5505f0e8eae, type: 3}
+  - soundName: actFailSpk
+    clip: {fileID: 8300000, guid: 743d8f28a05299542adcda7bc4c61de7, type: 3}
+  - soundName: badending
+    clip: {fileID: 8300000, guid: de4feccf4ed74fd4cb593a51ca31f1b4, type: 3}
+  - soundName: endingSlate1
+    clip: {fileID: 8300000, guid: f1b176e447c19a24cbe6e7c3fdf2f42c, type: 3}
+  - soundName: endingSlate2
+    clip: {fileID: 8300000, guid: da291cb4813d3ba42aed1b4fa67683bc, type: 3}
+  - soundName: endingSlateEnd
+    clip: {fileID: 8300000, guid: 0788f76d1610336449256048e87683c5, type: 3}
+  - soundName: filmGet
+    clip: {fileID: 8300000, guid: 0f3ef7b9ae7774c4da0b8172d88f4385, type: 3}
+  - soundName: footstep
+    clip: {fileID: 8300000, guid: 8f768721b4f85e947892dee6a156e9b3, type: 3}
+  - soundName: gameEnd
+    clip: {fileID: 8300000, guid: 669a3438ce5a0c14cb5ce9d34c0a24da, type: 3}
+  - soundName: heal
+    clip: {fileID: 8300000, guid: 0d9c559b571857f49ade560bfd2a285c, type: 3}
+  - soundName: injury
+    clip: {fileID: 8300000, guid: df0e1f0bc0653e94fb66ac80db1ce189, type: 3}
+  - soundName: itemBox1
+    clip: {fileID: 8300000, guid: ea0806992ea6d3d46918bf0310386a96, type: 3}
+  - soundName: itemBox2
+    clip: {fileID: 8300000, guid: 307dae23dbc8dc64faccab96b5da0f54, type: 3}
+  - soundName: hitObj
+    clip: {fileID: 8300000, guid: 0911d3f45de135449b4b9c2b812f7a61, type: 3}
+  - soundName: hitPlayer
+    clip: {fileID: 8300000, guid: 5f68f47da2505ea4f8fc062003661b17, type: 3}
+  - soundName: swingLong
+    clip: {fileID: 8300000, guid: 032a42c82e7078449a318ffb35265242, type: 3}
+  - soundName: swingShorts
+    clip: {fileID: 8300000, guid: 0fe416191039857409e97857709b7040, type: 3}
+  - soundName: happyending
+    clip: {fileID: 8300000, guid: 7f3f49c82c4e08d40a64de25e92ce691, type: 3}
+  audioSource: {fileID: 0}
+--- !u!4 &255106430
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 255106428}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 995.5516, y: 524.0642, z: 0.0670165}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &258941410
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -26054,4 +26140,5 @@ SceneRoots:
   - {fileID: 485182208}
   - {fileID: 733302782}
   - {fileID: 954348614}
+  - {fileID: 255106430}
   - {fileID: 2131187804}
