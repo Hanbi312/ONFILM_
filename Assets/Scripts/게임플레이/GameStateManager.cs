@@ -21,17 +21,20 @@ public class GameStateManager : NetworkBehaviour
     [SerializeField] private Animator[] doorAnimators;
 
     [Header("게임 설정")]
-    [SerializeField] private int requiredCameraOffCount = 4;
+    [SerializeField] private int requiredCameraOffCount = 3;
+    [SerializeField] private int requiredTragedyPoint = 3; // 악역 승리 조건
 
     [Networked] public NetworkBool HasScript { get; set; }
     [Networked] public int CameraOffCount { get; set; }
     [Networked] public NetworkBool IsDoorActivated { get; set; }
     [Networked] public NetworkBool IsGameClear { get; set; }
     [Networked] public int TragedyPoint { get; set; }
+    [Networked] public NetworkBool ActorWin { get; set; } // true=연기자 승, false=악역 승
 
     private float doorProgress = 0f;
     private bool isOpeningDoor = false;
     private ActorController localActor;
+    private KillerController localKiller;
 
     private void Awake()
     {
@@ -48,18 +51,37 @@ public class GameStateManager : NetworkBehaviour
     public override void Render()
     {
         if (exitDoor != null)
-            exitDoor.SetActive(IsDoorActivated);
+            exitDoor.SetActive(IsDoorActivated || TragedyPoint >= requiredTragedyPoint);
     }
 
     private void Update()
     {
         if (Object == null || !Object.IsValid) return;
-        if (IsGameClear || !IsDoorActivated) return;
+        if (IsGameClear) return;
 
+        // 연기자 조건: 카메라 4개 꺼짐
+        // 악역 조건: 비극 포인트 4점
+        bool actorCanOpen = IsDoorActivated;
+        bool killerCanOpen = TragedyPoint >= requiredTragedyPoint;
+
+        if (!actorCanOpen && !killerCanOpen) return;
+
+        // 로컬 플레이어 찾기
         if (localActor == null) FindLocalActor();
-        if (localActor == null) return;
+        if (localKiller == null) FindLocalKiller();
 
-        float dist = Vector3.Distance(exitDoor.transform.position, localActor.transform.position);
+        // 연기자 처리
+        if (actorCanOpen && localActor != null)
+            HandleDoorInteraction(localActor.transform, true);
+
+        // 악역 처리
+        if (killerCanOpen && localKiller != null)
+            HandleDoorInteraction(localKiller.transform, false);
+    }
+
+    private void HandleDoorInteraction(Transform playerTransform, bool isActor)
+    {
+        float dist = Vector3.Distance(exitDoor.transform.position, playerTransform.position);
         bool inRange = dist <= doorInteractRange;
 
         if (inRange)
@@ -68,32 +90,45 @@ public class GameStateManager : NetworkBehaviour
         {
             HideFKeyHint();
             ResetDoorProgress();
+            return;
         }
 
-        if (inRange && Input.GetKey(KeyCode.F))
+        if (inRange && Input.GetKeyDown(KeyCode.F))
+        {
+            if (!isOpeningDoor)
+            {
+                isOpeningDoor = true;
+                if (localActor != null && playerTransform == localActor.transform)
+                    localActor.RPC_PlayEmotion("OpenDoor");
+                else if (localKiller != null && playerTransform == localKiller.transform)
+                    localKiller.RPC_PlayEmotion("OpenDoor");
+            }
+            else
+            {
+                isOpeningDoor = false;
+                if (localActor != null && playerTransform == localActor.transform)
+                    localActor.RPC_ReturnToIdle();
+                else if (localKiller != null && playerTransform == localKiller.transform)
+                    localKiller.RPC_ReturnToIdle();
+                ResetDoorProgress();
+            }
+        }
+
+        if (isOpeningDoor && inRange)
         {
             doorProgress += Time.deltaTime;
             Debug.Log($"[GameStateManager] 문 진행도: {doorProgress:F1}/{doorInteractTime}");
 
-            if (!isOpeningDoor)
-            {
-                isOpeningDoor = true;
-                localActor.RPC_PlayEmotion("OpenDoor");
-            }
-
             if (doorProgress >= doorInteractTime)
             {
                 Debug.Log("[GameStateManager] 게이지 완료 - RPC_GameClear 호출!");
-                RPC_GameClear();
+                RPC_GameClear(isActor);
             }
         }
-        else if (!Input.GetKey(KeyCode.F))
+
+        if (!inRange && isOpeningDoor)
         {
-            if (isOpeningDoor)
-            {
-                isOpeningDoor = false;
-                localActor.RPC_ReturnToIdle();
-            }
+            isOpeningDoor = false;
             ResetDoorProgress();
         }
     }
@@ -111,6 +146,19 @@ public class GameStateManager : NetworkBehaviour
             if (actor.HasInputAuthority)
             {
                 localActor = actor;
+                return;
+            }
+        }
+    }
+
+    private void FindLocalKiller()
+    {
+        var killers = FindObjectsByType<KillerController>(FindObjectsSortMode.None);
+        foreach (var killer in killers)
+        {
+            if (killer.HasInputAuthority)
+            {
+                localKiller = killer;
                 return;
             }
         }
@@ -137,9 +185,23 @@ public class GameStateManager : NetworkBehaviour
 
     public void AddTragedyPoint()
     {
-        if (!HasStateAuthority) return;
+        if (HasStateAuthority)
+        {
+            TragedyPoint++;
+            Debug.Log($"[GameStateManager] 비극 포인트 +1 | 총 {TragedyPoint}포인트");
+        }
+        else
+        {
+            // 클라이언트에서 호출 시 서버로 RPC 전송
+            RPC_AddTragedyPoint();
+        }
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_AddTragedyPoint()
+    {
         TragedyPoint++;
-        Debug.Log($"[GameStateManager] 비극 포인트 +1 | 총 {TragedyPoint}포인트");
+        Debug.Log($"[GameStateManager] 비극 포인트 +1 (RPC) | 총 {TragedyPoint}포인트");
     }
 
     public void OnCameraOff()
@@ -155,22 +217,22 @@ public class GameStateManager : NetworkBehaviour
         }
     }
 
-    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
-    private void RPC_GameClear()
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void RPC_GameClear(bool actorWin)
     {
         if (IsGameClear) return;
         IsGameClear = true;
-        RPC_OnGameClear();
+        ActorWin = actorWin;
+        RPC_OnGameClear(actorWin);
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_OnGameClear()
+    private void RPC_OnGameClear(bool actorWin)
     {
-        Debug.Log("[GameStateManager] 게임 클리어!");
+        Debug.Log($"[GameStateManager] 게임 클리어! | {(actorWin ? "연기자 승리 - 해피엔딩" : "악역 승리 - 베드엔딩")}");
 
         if (doorAnimators != null && doorAnimators.Length > 0)
         {
-            Debug.Log($"[GameStateManager] 문 Animator 수: {doorAnimators.Length}");
             foreach (var anim in doorAnimators)
             {
                 if (anim != null)
@@ -179,22 +241,22 @@ public class GameStateManager : NetworkBehaviour
                     Debug.Log($"[GameStateManager] Open 트리거 발동: {anim.gameObject.name}");
                 }
                 else
-                {
                     Debug.LogError("[GameStateManager] doorAnimators 배열에 null 있음!");
-                }
             }
         }
         else
-        {
-            Debug.LogError("[GameStateManager] doorAnimators 배열이 비어있음! Inspector에서 연결 필요");
-        }
+            Debug.LogError("[GameStateManager] doorAnimators 배열이 비어있음!");
 
+        // 결과 저장 후 결과 씬으로 이동
+        ResultData.IsActorWin = actorWin;
         StartCoroutine(GameClearRoutine());
     }
 
     private IEnumerator GameClearRoutine()
     {
-        yield return new WaitForSeconds(1f);
-        Debug.Log("[GameStateManager] 게임 종료");
+        yield return new WaitForSeconds(2f);
+        Debug.Log("[GameStateManager] 결과 씬으로 이동");
+        if (Runner != null && Runner.IsServer)
+            Runner.LoadScene(SceneRef.FromIndex(5), UnityEngine.SceneManagement.LoadSceneMode.Single);
     }
 }

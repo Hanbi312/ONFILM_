@@ -116,12 +116,14 @@ public class KillerInteraction : MonoBehaviour
             carriedActor.RPC_Teleport(cam.spawnPoint.position, cam.spawnPoint.rotation);
 
         // 내려놓기
-        killerController.RPC_StopCarry(carriedActor.GetComponent<NetworkObject>().Id);
+        var actorNetId = carriedActor.GetComponent<NetworkObject>().Id;
+        killerController.RPC_StopCarry(actorNetId);
+
+        // actPoint는 초기화하지 않고 유지 (구출 후 재잡힘 시 이어서 진행)
+        cam.RPC_StartMiniGame(actorNetId);
+
         carriedActor = null;
         isCarrying = false;
-
-        // 서버에 VillainCamera 활성화 요청
-        cam.RPC_StartMiniGame();
 
         GameStateManager.Instance?.HideFKeyHint();
         Debug.Log("[KillerInteraction] VillainCamera 상호작용 시작 → 연기자 화면에 미니게임 표시");

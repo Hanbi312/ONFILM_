@@ -2850,7 +2850,7 @@ Animator:
   m_GameObject: {fileID: 8877824318928579577}
   m_Enabled: 1
   m_Avatar: {fileID: 9000000, guid: 05f8df949715a3740b72af4459165c73, type: 3}
-  m_Controller: {fileID: 9100000, guid: 7bb59f9902960624b8d72b37bb8fcda4, type: 2}
+  m_Controller: {fileID: 9100000, guid: e911626d138d2b349811c67c6d6fd711, type: 2}
   m_CullingMode: 1
   m_UpdateMode: 0
   m_ApplyRootMotion: 1
@@ -2977,6 +2977,12 @@ MonoBehaviour:
     _value: 0
   _SelfHealTime: 0
   _IsInjury:
+    _value: 0
+  _IsCarried:
+    _value: 0
+  _NetIsCarried:
+    _value: 0
+  _IsLockedByVillain:
     _value: 0
 --- !u!1 &9042362121062528323
 GameObject:

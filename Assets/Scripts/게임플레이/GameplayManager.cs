@@ -20,8 +20,10 @@ public class GameplayManager : MonoBehaviour
     [SerializeField] private NetworkObject defaultVillainPrefab;
 
     [Header("스폰 포인트")]
-    public Transform actorSpawnPoint;
+    public Transform actorSpawnPoint; // 리스폰용 기본 스폰 포인트
     [SerializeField] private Transform villainSpawnPoint;
+    [SerializeField] private Transform[] actorSpawnPoints;   // 연기자 랜덤 스폰 배열
+    [SerializeField] private Transform[] villainSpawnPoints; // 악역 랜덤 스폰 배열
 
     [Header("스폰 튜닝")]
     [SerializeField] private float spawnLift = 0.5f;
@@ -164,11 +166,43 @@ public class GameplayManager : MonoBehaviour
 
     private bool TrySpawnAllCharacters()
     {
-        if (actorSpawnPoint == null || villainSpawnPoint == null)
+        if (villainSpawnPoint == null)
         {
-            Debug.LogError("[GameplayManager] 스폰 포인트 연결 안 됨");
+            Debug.LogError("[GameplayManager] 악역 스폰 포인트 연결 안 됨");
             return false;
         }
+
+        // 연기자 스폰 포인트 준비
+        List<Transform> availableActorSpawnPoints = new List<Transform>();
+        if (actorSpawnPoints != null && actorSpawnPoints.Length > 0)
+        {
+            availableActorSpawnPoints.AddRange(actorSpawnPoints.Where(p => p != null));
+            for (int i = 0; i < availableActorSpawnPoints.Count; i++)
+            {
+                int rand = Random.Range(i, availableActorSpawnPoints.Count);
+                var temp = availableActorSpawnPoints[i];
+                availableActorSpawnPoints[i] = availableActorSpawnPoints[rand];
+                availableActorSpawnPoints[rand] = temp;
+            }
+        }
+        else if (actorSpawnPoint != null)
+            availableActorSpawnPoints.Add(actorSpawnPoint);
+
+        // 악역 스폰 포인트 준비
+        List<Transform> availableVillainSpawnPoints = new List<Transform>();
+        if (villainSpawnPoints != null && villainSpawnPoints.Length > 0)
+        {
+            availableVillainSpawnPoints.AddRange(villainSpawnPoints.Where(p => p != null));
+            for (int i = 0; i < availableVillainSpawnPoints.Count; i++)
+            {
+                int rand = Random.Range(i, availableVillainSpawnPoints.Count);
+                var temp = availableVillainSpawnPoints[i];
+                availableVillainSpawnPoints[i] = availableVillainSpawnPoints[rand];
+                availableVillainSpawnPoints[rand] = temp;
+            }
+        }
+        else if (villainSpawnPoint != null)
+            availableVillainSpawnPoints.Add(villainSpawnPoint);
 
         int activePlayerCount = runner.ActivePlayers.Count();
         List<NetworkPlayer> players = lobbyManager.GetAllNetworkPlayers();
@@ -185,6 +219,9 @@ public class GameplayManager : MonoBehaviour
             return false;
         }
 
+        int actorSpawnIndex = 0;
+        int villainSpawnIndex = 0;
+
         foreach (NetworkPlayer player in players)
         {
             if (player == null || !player.CanReadNetworkState() || player.Object == null)
@@ -195,7 +232,22 @@ public class GameplayManager : MonoBehaviour
             if (spawnedCharacters.ContainsKey(owner)) continue;
 
             MatchRole role = player.GetRole();
-            Transform spawnPoint = role == MatchRole.Actor ? actorSpawnPoint : villainSpawnPoint;
+            Transform spawnPoint;
+
+            if (role == MatchRole.Actor)
+            {
+                if (actorSpawnIndex < availableActorSpawnPoints.Count)
+                    spawnPoint = availableActorSpawnPoints[actorSpawnIndex++];
+                else
+                    spawnPoint = availableActorSpawnPoints[0];
+            }
+            else
+            {
+                if (villainSpawnIndex < availableVillainSpawnPoints.Count)
+                    spawnPoint = availableVillainSpawnPoints[villainSpawnIndex++];
+                else
+                    spawnPoint = availableVillainSpawnPoints[0];
+            }
 
             // 선택한 캐릭터 프리팹 결정
             NetworkObject prefabToSpawn = GetPrefabForPlayer(player, role);

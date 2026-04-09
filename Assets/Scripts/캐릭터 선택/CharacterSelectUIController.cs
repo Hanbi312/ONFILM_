@@ -195,7 +195,13 @@ public class CharacterSelectUIController : MonoBehaviour
 
         // 대기 화면일 때 초상화 실시간 갱신 (상대방 선택 반영)
         if (waitPanel != null && waitPanel.activeSelf)
+        {
             RefreshWaitPanel();
+        }
+        else
+        {
+            Debug.Log($"[CharacterSelectUI] waitPanel 비활성 | waitPanel={waitPanel != null} | activeSelf={waitPanel?.activeSelf}");
+        }
 
         // 서버에서 전원 준비 확인 → 게임플레이 씬 이동
         if (runner != null && runner.IsServer)
@@ -241,18 +247,20 @@ public class CharacterSelectUIController : MonoBehaviour
     {
         currentTab = tab;
         ClearGrid();
-        pendingCharacter = null;
-        selectButton.interactable = false;
+
+        // 탭 전환해도 이미 선택한 캐릭터/무기는 유지
+        // selectButton은 둘 다 선택됐을 때만 활성화
+        RefreshSelectButton();
+
         if (selectButtonText != null) selectButtonText.text = "선택하기";
 
-        ClearPreview(); // 3D 모델 초기화
+        ClearPreview();
 
         if (weaponInfoPanel != null)
             weaponInfoPanel.SetActive(false);
 
         if (tab == Tab.Weapon)
         {
-            // 무기 탭: SelectPanel은 그대로 두고 WeaponPanel을 위에 오버레이로 표시
             if (weaponPanel != null)
             {
                 weaponPanel.SetActive(true);
@@ -261,7 +269,6 @@ public class CharacterSelectUIController : MonoBehaviour
         }
         else
         {
-            // 연기자/악역 탭: WeaponPanel 닫기
             if (weaponPanel != null) weaponPanel.SetActive(false);
             if (gridContent != null) gridContent.gameObject.SetActive(true);
 
@@ -445,7 +452,7 @@ public class CharacterSelectUIController : MonoBehaviour
         if (myRole == MatchRole.Villain)
         {
             pendingWeapon = data;
-            selectButton.interactable = true;
+            RefreshSelectButton();
             if (selectButtonText != null) selectButtonText.text = "선택하기";
         }
     }
@@ -482,25 +489,41 @@ public class CharacterSelectUIController : MonoBehaviour
     // ═══════════════════════════════════════════════════════════
     private void OnClickSelect()
     {
-        if (currentTab == Tab.Weapon && pendingWeapon != null)
+        bool changed = false;
+
+        if (pendingWeapon != null)
         {
             CharacterSelectSession.Instance?.SetWeapon(pendingWeapon);
             Debug.Log($"[CharacterSelectUI] 무기 확정: {pendingWeapon.weaponName}");
-
-            if (selectButtonText != null)
-                selectButtonText.text = "선택완료";
+            changed = true;
         }
-        else if (pendingCharacter != null)
+
+        if (pendingCharacter != null)
         {
             CharacterSelectSession.Instance?.SetCharacter(pendingCharacter);
             Debug.Log($"[CharacterSelectUI] 캐릭터 확정: {pendingCharacter.characterName}");
-
-            if (selectButtonText != null)
-                selectButtonText.text = "선택완료";
+            changed = true;
         }
 
-        // 선택 결과를 즉시 서버에 전송 → 상대방 화면에 초상화 표시
-        SendSelectionRPC();
+        if (changed)
+        {
+            if (selectButtonText != null)
+                selectButtonText.text = "선택완료";
+            SendSelectionRPC();
+        }
+    }
+
+    // 선택하기 버튼 활성화 갱신
+    // 악역: 캐릭터 또는 무기 중 하나라도 pending이면 활성화
+    // 연기자: 캐릭터 pending이면 활성화
+    private void RefreshSelectButton()
+    {
+        if (selectButton == null) return;
+
+        if (myRole == MatchRole.Villain)
+            selectButton.interactable = pendingCharacter != null || pendingWeapon != null;
+        else
+            selectButton.interactable = pendingCharacter != null;
     }
 
     // 뒤로가기 버튼 - 선택 화면 → 대기 화면으로 복귀
@@ -544,29 +567,35 @@ public class CharacterSelectUIController : MonoBehaviour
             if (player == null || !player.CanReadNetworkState()) continue;
 
             MatchRole role = player.GetRole();
-
-            // NetworkPlayer에 저장된 이름으로 CharacterData 검색
             string selectedName = player.SelectedCharacterName.ToString();
             CharacterData data = null;
+
+            Debug.Log($"[CharacterSelectUI] 팀원 확인 | {player.Nickname} | Role={role} | 선택={selectedName}");
 
             if (!string.IsNullOrEmpty(selectedName) && session.AllCharacters != null)
                 data = session.AllCharacters.Find(c => c.characterName == selectedName);
 
-            // 로컬 플레이어는 Session에서 직접 읽기 (RPC 전송 전에도 즉시 반영)
+            // 로컬 플레이어는 Session에서 직접 읽기
             if (player == myNetworkPlayer)
                 data = session.SelectedCharacter ?? data;
 
             if (role == MatchRole.Actor)
             {
                 if (data != null && actorPortraitSlots != null && actorSlotIndex < actorPortraitSlots.Length)
+                {
                     actorPortraitSlots[actorSlotIndex].sprite = data.portrait;
+                    Debug.Log($"[CharacterSelectUI] 연기자 슬롯{actorSlotIndex} 프로필 설정: {data.characterName}");
+                }
                 actorSlotIndex++;
             }
 
             if (role == MatchRole.Villain)
             {
                 if (data != null && villainPortraitInWait != null)
+                {
                     villainPortraitInWait.sprite = data.portrait;
+                    Debug.Log($"[CharacterSelectUI] 악역 프로필 설정: {data.characterName}");
+                }
             }
         }
     }
