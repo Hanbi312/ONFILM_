@@ -1,4 +1,5 @@
-﻿using System;
+﻿
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -321,16 +322,19 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
         var waitingRooms = cachedSessionList
             .Where(s => s.IsOpen)
             .Where(s => s.Properties != null)
-            .Where(s => s.Properties.ContainsKey("state"));
+            .Where(s => s.Properties.ContainsKey("state"))
+            .Where(s => s.PlayerCount < s.MaxPlayers); // 슬롯이 남아있는 방
 
         if (selectedRole == MatchRole.Villain)
         {
+            // 악역: 악역 슬롯이 남아있는 방
             waitingRooms = waitingRooms
                 .Where(s => s.Properties.ContainsKey("villainCount"))
                 .Where(s => (int)s.Properties["villainCount"] < maxVillainCount);
         }
         else if (selectedRole == MatchRole.Actor)
         {
+            // 연기자: 연기자 슬롯이 남아있는 방
             waitingRooms = waitingRooms
                 .Where(s => s.Properties.ContainsKey("actorCount"))
                 .Where(s => (int)s.Properties["actorCount"] < maxActorCount);
@@ -397,13 +401,21 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
         NetworkObject playerObject = runner.Spawn(networkPlayerPrefab, Vector3.zero, Quaternion.identity, player);
         runner.SetPlayerObject(player, playerObject);
 
-        NetworkPlayer networkPlayer = playerObject.GetComponent<NetworkPlayer>();
+        NetworkPlayer networkPlayer = playerObject.GetComponent<NetworkObject>().GetComponent<NetworkPlayer>();
         networkPlayer.Initialize(nickname, role, true);
 
         spawnedPlayers[player] = networkPlayer;
         registeredPlayers[player] = networkPlayer;
 
         RecalculateRoleCounts();
+
+        // 세션 프로퍼티 업데이트 (다른 플레이어들이 슬롯 확인용)
+        runner.SessionInfo.UpdateCustomProperties(new Dictionary<string, SessionProperty>
+        {
+            { "villainCount", (SessionProperty)currentVillainCount },
+            { "actorCount", (SessionProperty)currentActorCount }
+        });
+
         Debug.Log($"[FusionLobbyManager] NetworkPlayer 스폰 완료 | Player={player} | Nickname={nickname} | Role={role}");
 
         TryStartCharacterSelectScene();

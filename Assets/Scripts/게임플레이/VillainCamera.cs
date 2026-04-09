@@ -19,6 +19,7 @@ public class VillainCamera : NetworkBehaviour
 
     // [Networked]로 모든 클라이언트에 동기화
     [Networked] public NetworkBool IsMiniGameActiveNet { get; set; }
+    [Networked] public NetworkId TargetActorId { get; set; } // 미니게임 대상 연기자 ID
 
     // 로컬 상태
     public float actPoint = 0f;
@@ -47,9 +48,10 @@ public class VillainCamera : NetworkBehaviour
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    public void RPC_StartMiniGame()
+    public void RPC_StartMiniGame(NetworkId actorId)
     {
         IsMiniGameActiveNet = true;
+        TargetActorId = actorId;
         actPoint = 0f;
         Debug.Log("[VillainCamera] 미니게임 시작 - 모든 클라이언트에 동기화");
     }

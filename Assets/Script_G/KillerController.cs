@@ -353,4 +353,20 @@ public class KillerController : NetworkBehaviour
         }
         return null;
     }
+
+    [Rpc(RpcSources.All, RpcTargets.All)]
+public void RPC_PlayEmotion(string trigger)
+{
+    if (anim != null && !string.IsNullOrEmpty(trigger))
+        anim.SetTrigger(trigger);
+}
+
+[Rpc(RpcSources.All, RpcTargets.All)]
+public void RPC_ReturnToIdle()
+{
+    if (anim == null) return;
+    anim.ResetTrigger("OpenDoor");
+    anim.Play("Breathing Idle");
+}
+
 }

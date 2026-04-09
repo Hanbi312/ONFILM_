@@ -4049,7 +4049,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1438027426
 RectTransform:
   m_ObjectHideFlags: 0
@@ -4069,6 +4069,7 @@ RectTransform:
   - {fileID: 706318207}
   - {fileID: 1590665390}
   - {fileID: 1501834705}
+  - {fileID: 1799167017}
   - {fileID: 2043462497}
   m_Father: {fileID: 1319464568}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -4091,7 +4092,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 0}
-  m_RaycastTarget: 1
+  m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
@@ -4222,6 +4223,8 @@ MonoBehaviour:
   waitPanel: {fileID: 1949012347}
   actorPortraitSlots:
   - {fileID: 1860269604}
+  - {fileID: 549948111}
+  - {fileID: 971073072}
   openSelectPanelButton: {fileID: 364250392}
   villainPortraitInWait: {fileID: 1750240596}
   timerText: {fileID: 1913649203}
@@ -4445,7 +4448,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 0.392}
-  m_RaycastTarget: 0
+  m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
@@ -4843,8 +4846,7 @@ RectTransform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 4.9592, y: 7.81074, z: 4.9592}
   m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 1799167017}
+  m_Children: []
   m_Father: {fileID: 1438027426}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -5477,15 +5479,15 @@ RectTransform:
   m_GameObject: {fileID: 1799167016}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.20164543, y: 0.12802884, z: 0.20164543}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 243466122}
-  m_Father: {fileID: 1590665390}
+  m_Father: {fileID: 1438027426}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0}
   m_AnchorMax: {x: 0.5, y: 0}
-  m_AnchoredPosition: {x: 1.9, y: 9.2}
+  m_AnchoredPosition: {x: 572.4225, y: 251.3218}
   m_SizeDelta: {x: 250, y: 70}
   m_Pivot: {x: 0.5, y: 0}
 --- !u!114 &1799167018
@@ -6226,7 +6228,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1949012348
 RectTransform:
   m_ObjectHideFlags: 0

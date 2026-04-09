@@ -916,7 +916,7 @@ MonoBehaviour:
   runnerPrefab: {fileID: 1249135449634260634, guid: a1dd3b716684fba4d910402fbc34842a, type: 3}
   networkPlayerPrefab: {fileID: 3150878334306061863, guid: a3f9612ffcc15fc44b12c562758b2426, type: 3}
   maxVillainCount: 1
-  maxActorCount: 1
+  maxActorCount: 2
   characterSelectSceneBuildIndex: 3
   gameplaySceneBuildIndex: 4
 --- !u!4 &421607916
