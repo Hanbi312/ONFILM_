@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 using TMPro;
 
@@ -45,8 +46,14 @@ public class KeyManager : MonoBehaviour
     public Color defaultColor = Color.black;    // 기본 색상
     public Color activeColor = Color.red;    // 변경 중 색상
 
+    public TMP_Text warningText;            //경고 문구 출력
+    public float warningDuration = 1f;      //경고 문구 출력 시간
+
+
     private void Awake()
     {
+        KeySetting.keys.Clear();
+
         for (int i = 0; i < (int)KeyAction.KEYCOUNT; i++)
         {
             KeyAction action = (KeyAction)i;
@@ -103,6 +110,25 @@ public class KeyManager : MonoBehaviour
     {
         KeyAction action = (KeyAction)keyIndex;
 
+        // 현재 값 저장 (유지용)
+        KeyCode previousKey = KeySetting.keys[action];
+
+        // 중복 검사
+        foreach (var pair in KeySetting.keys)
+        {
+            if (pair.Value == keyCode && pair.Key != action)
+            {
+                ShowWarning($"해당 키({keyCode})는 이미 사용 중입니다.");
+
+                // UI 색상 복구
+                if (keyTexts != null && keyIndex < keyTexts.Length && keyTexts[keyIndex] != null)
+                    keyTexts[keyIndex].color = defaultColor;
+
+                key = -1;
+                return; // 기존 값 유지
+            }
+        }
+
         // 딕셔너리 업데이트
         KeySetting.keys[action] = keyCode;
 
@@ -127,5 +153,25 @@ public class KeyManager : MonoBehaviour
             PlayerPrefs.SetInt("Key_" + action.ToString(), (int)defaultKeys[i]);
         }
         PlayerPrefs.Save();
+    }
+
+    Coroutine warningCoroutine;
+
+    void ShowWarning(string message)
+    {
+        if (warningCoroutine != null)
+            StopCoroutine(warningCoroutine);
+
+        warningCoroutine = StartCoroutine(WarningRoutine(message));
+    }
+
+    IEnumerator WarningRoutine(string message)
+    {
+        warningText.text = message;
+        warningText.gameObject.SetActive(true);
+
+        yield return new WaitForSeconds(warningDuration);
+
+        warningText.gameObject.SetActive(false);
     }
 }

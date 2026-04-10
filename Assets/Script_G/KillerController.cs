@@ -98,6 +98,12 @@ public class KillerController : NetworkBehaviour
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
         }
+
+        if (HasInputAuthority)
+        {
+            mouseSensitivity = SettingsManager.Instance.CurrentSensitivity;
+            SettingsManager.OnSensitivityChanged += UpdateSensitivity;
+        }
     }
 
     private void Update()
@@ -355,18 +361,30 @@ public class KillerController : NetworkBehaviour
     }
 
     [Rpc(RpcSources.All, RpcTargets.All)]
-public void RPC_PlayEmotion(string trigger)
-{
-    if (anim != null && !string.IsNullOrEmpty(trigger))
-        anim.SetTrigger(trigger);
-}
+    public void RPC_PlayEmotion(string trigger)
+    {
+        if (anim != null && !string.IsNullOrEmpty(trigger))
+            anim.SetTrigger(trigger);
+    }
 
-[Rpc(RpcSources.All, RpcTargets.All)]
-public void RPC_ReturnToIdle()
-{
-    if (anim == null) return;
-    anim.ResetTrigger("OpenDoor");
-    anim.Play("Breathing Idle");
-}
+    [Rpc(RpcSources.All, RpcTargets.All)]
+    public void RPC_ReturnToIdle()
+    {
+        if (anim == null) return;
+        anim.ResetTrigger("OpenDoor");
+        anim.Play("Breathing Idle");
+    }
+
+    void UpdateSensitivity(float value)
+    {
+        if (HasInputAuthority)
+            mouseSensitivity = value;
+    }
+
+    void OnDestroy()
+    {
+        SettingsManager.OnSensitivityChanged -= UpdateSensitivity;
+    }
+
 
 }

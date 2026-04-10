@@ -109,6 +109,13 @@ public class ActorController : NetworkBehaviour
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
         }
+
+        if (HasInputAuthority)
+        {
+            mouseSensitivity = SettingsManager.Instance.CurrentSensitivity;
+
+            SettingsManager.OnSensitivityChanged += UpdateSensitivity;
+        }
     }
 
     private void Update()
@@ -400,5 +407,16 @@ public class ActorController : NetworkBehaviour
         YVelocity = 0f;
         if (cc != null) cc.enabled = true;
         Debug.Log($"[ActorController] RPC_Teleport 완료: {position}");
+    }
+
+    void UpdateSensitivity(float value)
+    {
+        if (HasInputAuthority)
+            mouseSensitivity = value;
+    }
+
+    void OnDestroy()
+    {
+        SettingsManager.OnSensitivityChanged -= UpdateSensitivity;
     }
 }

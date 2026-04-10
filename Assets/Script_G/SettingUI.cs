@@ -35,8 +35,8 @@ public class SettingUI : MonoBehaviour
                 isUIOpen = true;
                 isAnyUIOpen = true;
 
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
+                MouseLock.Instance.PushState(GameState.UI);
+                settingUI.SetActive(true);
             }
             else
             {
@@ -44,8 +44,8 @@ public class SettingUI : MonoBehaviour
                 isUIOpen = false;
                 isAnyUIOpen = false;
 
-                Cursor.lockState = CursorLockMode.Locked;
-                Cursor.visible = false;
+                settingUI.SetActive(false);
+                MouseLock.Instance.PopState();
             }
         }
 

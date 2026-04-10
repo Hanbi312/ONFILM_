@@ -10,11 +10,23 @@ public class SettingsManager : MonoBehaviour
     public Slider sensitivitySlider;
 
     [Header("오디오 믹서")]
-    public AudioMixer audioMixer;
+    public AudioMixer audioMixerMain;
+    public AudioMixer audioMixerMenu;
 
     [Header("범위 설정")]
     public float sensitivityMin = 0.1f;
     public float sensitivityMax = 5f;
+
+    public static SettingsManager Instance;
+
+    public static event System.Action<float> OnSensitivityChanged;
+
+    public float CurrentSensitivity { get; private set; }
+
+    void Awake()
+    {
+        Instance = this;
+    }
 
     void Start()
     {
@@ -51,23 +63,21 @@ public class SettingsManager : MonoBehaviour
 
     void ApplyMainVolume(float value)
     {
-        audioMixer.SetFloat("MainVolume", ToDecibel(value));
+        audioMixerMain.SetFloat("MainVolume", ToDecibel(value));
         PlayerPrefs.SetFloat("MainVolume", value);
     }
 
     void ApplyMenuVolume(float value)
     {
-        audioMixer.SetFloat("MenuVolume", ToDecibel(value));
+        audioMixerMenu.SetFloat("MenuVolume", ToDecibel(value));
         PlayerPrefs.SetFloat("MenuVolume", value);
     }
 
     void ApplySensitivity(float value)
     {
-        var actor = FindObjectOfType<ActorController>();
-        if (actor != null) actor.mouseSensitivity = value;
+        CurrentSensitivity = value;
 
-        var killer = FindObjectOfType<KillerController>();
-        if (killer != null) killer.mouseSensitivity = value;
+        OnSensitivityChanged?.Invoke(value);
 
         PlayerPrefs.SetFloat("Sensitivity", value);
     }

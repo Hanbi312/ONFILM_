@@ -9,16 +9,26 @@ using UnityEngine;
 // NetworkRunner에 AddCallbacks(this)로 등록해야 함
 public class InputProvider : MonoBehaviour, INetworkRunnerCallbacks
 {
+    bool GetKeySafe(KeyAction action)
+    {
+        if (!KeySetting.keys.ContainsKey(action))
+            return false;
+
+        return Input.GetKey(KeySetting.keys[action]);
+    }
+
     public void OnInput(NetworkRunner runner, NetworkInput input)
     {
+        Debug.Log(KeySetting.keys.Count);
+
         var data = new PlayerNetworkInput();
 
         // 이동
         Vector2 move = Vector2.zero;
-        if (Input.GetKey(KeySetting.keys[KeyAction.LEFT])) move.x -= 1f;
-        if (Input.GetKey(KeySetting.keys[KeyAction.RIGHT])) move.x += 1f;
-        if (Input.GetKey(KeySetting.keys[KeyAction.UP])) move.y += 1f;
-        if (Input.GetKey(KeySetting.keys[KeyAction.DOWN])) move.y -= 1f;
+        if (GetKeySafe(KeyAction.LEFT)) move.x -= 1f;
+        if (GetKeySafe(KeyAction.RIGHT)) move.x += 1f;
+        if (GetKeySafe(KeyAction.UP)) move.y += 1f;
+        if (GetKeySafe(KeyAction.DOWN)) move.y -= 1f;
         data.move = move.normalized;
 
         // 마우스 시선
@@ -28,10 +38,10 @@ public class InputProvider : MonoBehaviour, INetworkRunnerCallbacks
         );
 
         // 버튼
-        data.buttons.Set(PlayerNetworkInput.WALK, Input.GetKey(KeySetting.keys[KeyAction.WALK]));
-        data.buttons.Set(PlayerNetworkInput.SIT, Input.GetKey(KeySetting.keys[KeyAction.SIT]));
-        data.buttons.Set(PlayerNetworkInput.HEAL, Input.GetKey(KeySetting.keys[KeyAction.HEAL]));
-        data.buttons.Set(PlayerNetworkInput.VAULT, Input.GetKey(KeySetting.keys[KeyAction.VAULT]));
+        data.buttons.Set(PlayerNetworkInput.WALK, GetKeySafe(KeyAction.WALK));
+        data.buttons.Set(PlayerNetworkInput.SIT, GetKeySafe(KeyAction.SIT));
+        data.buttons.Set(PlayerNetworkInput.HEAL, GetKeySafe(KeyAction.HEAL));
+        data.buttons.Set(PlayerNetworkInput.VAULT, GetKeySafe(KeyAction.VAULT));
 
         input.Set(data);
     }

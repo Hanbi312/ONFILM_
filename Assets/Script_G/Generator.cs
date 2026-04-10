@@ -158,8 +158,7 @@ public class Generator : MonoBehaviour
         isMiniGameActive = true;
         miniGamePanel.SetActive(true);
 
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
+        MouseLock.Instance.PushState(GameState.MiniGame);
 
         if (script != null)
             script.SetupMiniGame(this);
@@ -172,8 +171,8 @@ public class Generator : MonoBehaviour
         isMiniGameActive = false;
         if (miniGamePanel != null) miniGamePanel.SetActive(false);
 
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
+        MouseLock.Instance.PopState();
+
         miniGameTime = 0f;
     }
 }
