@@ -24,6 +24,8 @@ public class MainUIController : MonoBehaviour
 
     private void Start()
     {
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
         ShowLoginPanel();
     }
 

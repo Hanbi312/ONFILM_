@@ -2125,6 +2125,7 @@ MonoBehaviour:
   mouseSensitivity: 2
   pitchMin: -35
   pitchMax: 70
+  cameraSmoothing: 20
   attackCooldown: 0.6
   attackLockTime: 0.35
   killerLight: {fileID: 1497583253590292863}
@@ -2162,8 +2163,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   interactRange: 2
-  minTriggerTime: 2
-  maxTriggerTime: 5
 --- !u!1 &3821336974943596441
 GameObject:
   m_ObjectHideFlags: 0

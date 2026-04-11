@@ -24,6 +24,7 @@ public class KillerController : NetworkBehaviour
     public float mouseSensitivity = 2.0f;
     public float pitchMin = -35f;
     public float pitchMax = 70f;
+    public float cameraSmoothing = 30f;
 
     [Header("Combat")]
     public float attackCooldown = 0.6f;
@@ -83,8 +84,8 @@ public class KillerController : NetworkBehaviour
             NetYaw = transform.eulerAngles.y;
             NetPitch = 0f;
             YVelocity = 0f;
-            isFrozen = true;
-            localFreezeTimer = 0f;
+            isFrozen = false;
+            if (cc != null) cc.enabled = true;
             NetLightOn = true;
             NetAttackTrigger = "Attack";
         }
@@ -97,12 +98,6 @@ public class KillerController : NetworkBehaviour
         {
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
-        }
-
-        if (HasInputAuthority)
-        {
-            mouseSensitivity = SettingsManager.Instance.CurrentSensitivity;
-            SettingsManager.OnSensitivityChanged += UpdateSensitivity;
         }
     }
 
@@ -177,7 +172,6 @@ public class KillerController : NetworkBehaviour
         HandleAttack(input);
         MoveAndAnimate(input);
 
-        // 들고 있는 연기자 위치 서버에서 업데이트
         if (NetIsCarrying && carriedActorRef != null)
         {
             var actorCc = carriedActorRef.GetComponent<CharacterController>();
@@ -187,7 +181,6 @@ public class KillerController : NetworkBehaviour
         }
         else if (!NetIsCarrying && carriedActorRef != null)
         {
-            // 내려놓은 후 CC 확실히 활성화
             var actorCc = carriedActorRef.GetComponent<CharacterController>();
             if (actorCc != null) actorCc.enabled = true;
             carriedActorRef = null;
@@ -197,7 +190,10 @@ public class KillerController : NetworkBehaviour
     private void LateUpdate()
     {
         if (HasInputAuthority && cameraRoot != null)
-            cameraRoot.localRotation = Quaternion.Euler(NetPitch, 0f, 0f);
+        {
+            Quaternion targetRot = Quaternion.Euler(NetPitch, 0f, 0f);
+            cameraRoot.localRotation = Quaternion.Lerp(cameraRoot.localRotation, targetRot, Time.deltaTime * cameraSmoothing);
+        }
     }
 
     private void HandleLook(PlayerNetworkInput input)
@@ -247,9 +243,8 @@ public class KillerController : NetworkBehaviour
 
         Vector3 inputDir = new Vector3(input.move.x, 0f, input.move.y).normalized;
         bool isMoving = inputDir.sqrMagnitude > 0.001f;
-        bool isWalking = isMoving && input.buttons.IsSet(PlayerNetworkInput.WALK);
 
-        float speed = isWalking ? walkSpeed : runSpeed;
+        float speed = runSpeed;
         Vector3 moveDir = (transform.forward * inputDir.z + transform.right * inputDir.x).normalized;
 
         if (cc.isGrounded && YVelocity < 0f) YVelocity = groundedStick;
@@ -257,7 +252,7 @@ public class KillerController : NetworkBehaviour
         cc.Move((moveDir * speed + Vector3.up * YVelocity) * Runner.DeltaTime);
 
         NetIsMoving = isMoving;
-        NetIsWalking = isWalking;
+        NetIsWalking = false;
     }
 
     private void ApplyGravityOnly()
@@ -266,6 +261,21 @@ public class KillerController : NetworkBehaviour
         if (cc.isGrounded && YVelocity < 0f) YVelocity = groundedStick;
         YVelocity += gravity * Runner.DeltaTime;
         cc.Move(Vector3.up * YVelocity * Runner.DeltaTime);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.All)]
+    public void RPC_PlayEmotion(string trigger)
+    {
+        if (anim != null && !string.IsNullOrEmpty(trigger))
+            anim.SetTrigger(trigger);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.All)]
+    public void RPC_ReturnToIdle()
+    {
+        if (anim == null) return;
+        anim.ResetTrigger("OpenDoor");
+        anim.Play("Breathing Idle");
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -280,7 +290,6 @@ public class KillerController : NetworkBehaviour
         follower.target = FindBoneRecursive(transform, "hand.R");
     }
 
-    // ─── 들기/내려놓기 RPC ──────────────────────
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void RPC_StartCarry(NetworkId actorId)
     {
@@ -288,7 +297,6 @@ public class KillerController : NetworkBehaviour
         var actor = actorObj.GetComponent<ActorController>();
         if (actor == null) return;
 
-        // 사망 상태가 아니면 들 수 없음
         if (!actor.IsDead) return;
 
         NetIsCarrying = true;
@@ -302,7 +310,6 @@ public class KillerController : NetworkBehaviour
         RPC_SyncCarry(actorId, true);
         RPC_PlayPickup();
         actor.RPC_PlayBeingPickedUp();
-        Debug.Log($"[KillerController] 연기자 들기: {actorObj.name}");
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -329,8 +336,7 @@ public class KillerController : NetworkBehaviour
 
         RPC_SyncCarry(actorId, false);
         RPC_PlayPutDown();
-        actor.RPC_PlayBeingPutDown(); // 연기자 내려지는 애니메이션
-        Debug.Log($"[KillerController] 연기자 내려놓기: {actorObj.name}");
+        actor.RPC_PlayBeingPutDown();
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -359,32 +365,4 @@ public class KillerController : NetworkBehaviour
         }
         return null;
     }
-
-    [Rpc(RpcSources.All, RpcTargets.All)]
-    public void RPC_PlayEmotion(string trigger)
-    {
-        if (anim != null && !string.IsNullOrEmpty(trigger))
-            anim.SetTrigger(trigger);
-    }
-
-    [Rpc(RpcSources.All, RpcTargets.All)]
-    public void RPC_ReturnToIdle()
-    {
-        if (anim == null) return;
-        anim.ResetTrigger("OpenDoor");
-        anim.Play("Breathing Idle");
-    }
-
-    void UpdateSensitivity(float value)
-    {
-        if (HasInputAuthority)
-            mouseSensitivity = value;
-    }
-
-    void OnDestroy()
-    {
-        SettingsManager.OnSensitivityChanged -= UpdateSensitivity;
-    }
-
-
 }

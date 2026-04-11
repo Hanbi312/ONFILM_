@@ -29,6 +29,7 @@ public class ActorController : NetworkBehaviour
     public float mouseSensitivity = 2.0f;
     public float pitchMin = -35f;
     public float pitchMax = 70f;
+    public float cameraSmoothing = 30f;
 
     [Header("Status")]
     public float defaultHealth = 2f;
@@ -91,30 +92,27 @@ public class ActorController : NetworkBehaviour
 
         if (HasStateAuthority)
         {
-            Health = defaultHealth;
+            // Host Migration 후 재스폰 시 체력 초기화 방지
+            if (Health <= 0f)
+                Health = defaultHealth;
+
             NetYaw = transform.eulerAngles.y;
             NetPitch = 0f;
             YVelocity = 0f;
-            isFrozen = true;
-            localFreezeTimer = 0f;
+            isFrozen = false; // Host Migration 후 바로 활성화
+            if (cc != null) cc.enabled = true;
             NetLightOn = true;
         }
         else
         {
             isFrozen = false;
+            if (cc != null) cc.enabled = isLocal;
         }
 
         if (isLocal)
         {
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
-        }
-
-        if (HasInputAuthority)
-        {
-            mouseSensitivity = SettingsManager.Instance.CurrentSensitivity;
-
-            SettingsManager.OnSensitivityChanged += UpdateSensitivity;
         }
     }
 
@@ -179,15 +177,32 @@ public class ActorController : NetworkBehaviour
     private void LateUpdate()
     {
         if (HasInputAuthority && cameraRoot != null)
-            cameraRoot.localRotation = Quaternion.Euler(NetPitch, 0f, 0f);
+        {
+            Quaternion targetRot = Quaternion.Euler(NetPitch, 0f, 0f);
+            cameraRoot.localRotation = Quaternion.Lerp(cameraRoot.localRotation, targetRot, Time.deltaTime * cameraSmoothing);
+        }
+    }
+
+    private ActorInteraction actorInteractionCache;
+
+    private bool IsInMiniGame()
+    {
+        if (actorInteractionCache == null)
+            actorInteractionCache = GetComponent<ActorInteraction>();
+        return actorInteractionCache != null && actorInteractionCache.IsInMiniGame;
     }
 
     private void HandleLook(PlayerNetworkInput input)
     {
-        NetYaw += input.look.x * mouseSensitivity;
         NetPitch -= input.look.y * mouseSensitivity;
         NetPitch = Mathf.Clamp(NetPitch, pitchMin, pitchMax);
-        transform.rotation = Quaternion.Euler(0f, NetYaw, 0f);
+
+        // 미니게임 중에는 몸통 회전 잠금 (카메라 상하 시점은 유지)
+        if (!IsInMiniGame())
+        {
+            NetYaw += input.look.x * mouseSensitivity;
+            transform.rotation = Quaternion.Euler(0f, NetYaw, 0f);
+        }
     }
 
     private void MoveAndAnimate(PlayerNetworkInput input)
@@ -195,7 +210,7 @@ public class ActorController : NetworkBehaviour
         if (cc == null || !cc.enabled) return;
 
         // 악역 카메라 미니게임 중 이동 잠금
-        if (IsLockedByVillain)
+        if (IsLockedByVillain || IsInMiniGame())
         {
             NetIsMoving = false;
             NetIsWalking = false;
@@ -213,7 +228,7 @@ public class ActorController : NetworkBehaviour
         bool isMoving = inputDir.sqrMagnitude > 0.001f;
         bool isWalking = isMoving && runPressed && !IsDead;
         bool isSitting = isMoving && sitPressed && !IsDead;
-        bool isRecovering = SelfHealTime > 0f && healPressed;
+        bool isRecovering = healPressed && IsInjury && !IsDead && !SelfHeal;
         bool isVaulting = crashWall && vaultPressed;
 
         float speed = 0f;
@@ -249,21 +264,22 @@ public class ActorController : NetworkBehaviour
 
         bool healPressed = input.buttons.IsSet(PlayerNetworkInput.HEAL);
 
-        if (IsDead && !SelfHeal && healPressed)
+        // 부상 상태(체력 1)에서만 자가치료 가능
+        bool canHeal = IsInjury && !IsDead && !SelfHeal;
+
+        if (healPressed && canHeal)
         {
             SelfHealTime += Runner.DeltaTime;
+
             if (SelfHealTime >= 5f)
             {
                 SelfHeal = true;
                 SelfHealTime = 0f;
-                Health += 1f;
-                IsDead = false;
+                Health = defaultHealth; // 체력 완전 회복
+                RPC_PlayHeal();
             }
         }
-        else if (!healPressed)
-        {
-            SelfHealTime = 0f;
-        }
+        // H를 떼면 게이지 유지 (초기화 안 함)
 
         IsInjury = Health <= 1f;
     }
@@ -327,6 +343,14 @@ public class ActorController : NetworkBehaviour
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_PlayHeal()
+    {
+        if (anim != null)
+            anim.SetTrigger("Heal");
+        Debug.Log("[ActorController] 자가치료 애니메이션 재생");
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_PlayHit()
     {
         if (anim != null)
@@ -338,6 +362,12 @@ public class ActorController : NetworkBehaviour
     {
         if (anim != null)
             anim.SetTrigger("Death");
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void RPC_NotifyFilmPickedUp()
+    {
+        GameStateManager.Instance?.OnFilmPickedUp();
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -407,16 +437,5 @@ public class ActorController : NetworkBehaviour
         YVelocity = 0f;
         if (cc != null) cc.enabled = true;
         Debug.Log($"[ActorController] RPC_Teleport 완료: {position}");
-    }
-
-    void UpdateSensitivity(float value)
-    {
-        if (HasInputAuthority)
-            mouseSensitivity = value;
-    }
-
-    void OnDestroy()
-    {
-        SettingsManager.OnSensitivityChanged -= UpdateSensitivity;
     }
 }

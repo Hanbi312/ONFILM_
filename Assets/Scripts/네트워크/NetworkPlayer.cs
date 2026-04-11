@@ -24,6 +24,18 @@ public class NetworkPlayer : NetworkBehaviour
 
         if (FusionLobbyManager.Instance != null)
             FusionLobbyManager.Instance.RegisterNetworkPlayer(this);
+
+        // 클라이언트가 스폰되면 즉시 역할을 서버에 전송
+        if (HasInputAuthority && !HasStateAuthority)
+        {
+            var lobbyManager = FusionLobbyManager.Instance;
+            if (lobbyManager != null)
+            {
+                MatchRole myRole = lobbyManager.GetSelectedRole();
+                string myNickname = PlayerSession.Instance?.Nickname ?? $"Player_{Object.InputAuthority.PlayerId}";
+                RPC_SendRole((int)myRole, myNickname);
+            }
+        }
     }
 
     public override void Despawned(NetworkRunner runner, bool hasState)
@@ -60,6 +72,15 @@ public class NetworkPlayer : NetworkBehaviour
     {
         if (!CanReadNetworkState()) return false;
         return IsReady;
+    }
+
+    // 클라이언트가 연결 시 서버에 역할 전송
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    public void RPC_SendRole(int roleValue, string nickname)
+    {
+        if (FusionLobbyManager.Instance != null)
+            FusionLobbyManager.Instance.SetPendingRole(Object.InputAuthority, (MatchRole)roleValue, nickname);
+        Debug.Log($"[NetworkPlayer] RPC_SendRole | Role={(MatchRole)roleValue} | Nickname={nickname}");
     }
 
     // 준비 상태 변경 RPC

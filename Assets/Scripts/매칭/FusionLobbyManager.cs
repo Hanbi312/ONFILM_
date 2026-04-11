@@ -1,5 +1,4 @@
-﻿
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -43,6 +42,7 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
     private readonly Dictionary<PlayerRef, MatchRole> pendingRoles = new Dictionary<PlayerRef, MatchRole>();
     private readonly Dictionary<PlayerRef, string> pendingNicknames = new Dictionary<PlayerRef, string>();
     private readonly Dictionary<PlayerRef, NetworkPlayer> registeredPlayers = new Dictionary<PlayerRef, NetworkPlayer>();
+    private readonly Queue<(MatchRole role, string nickname)> pendingConnectionTokens = new Queue<(MatchRole, string)>();
 
     public event Action<string> OnStatusChanged;
     public event Action<int, int> OnPlayerCountChanged;
@@ -278,9 +278,10 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
             OnStatusChanged?.Invoke("기존 방에 입장하는 중...");
             args = new StartGameArgs
             {
-                GameMode = GameMode.Client,
+                GameMode = GameMode.AutoHostOrClient,
                 SessionName = targetRoomName,
-                SceneManager = runner.GetComponent<NetworkSceneManagerDefault>()
+                SceneManager = runner.GetComponent<NetworkSceneManagerDefault>(),
+                ConnectionToken = System.Text.Encoding.UTF8.GetBytes($"{(int)selectedRole}|{PlayerSession.Instance?.Nickname ?? "Guest"}")
             };
         }
         else
@@ -297,7 +298,7 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
 
             args = new StartGameArgs
             {
-                GameMode = GameMode.Host,
+                GameMode = GameMode.AutoHostOrClient,
                 SessionName = newRoomName,
                 PlayerCount = GetMaxPlayerCount(),
                 SessionProperties = properties,
@@ -322,19 +323,16 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
         var waitingRooms = cachedSessionList
             .Where(s => s.IsOpen)
             .Where(s => s.Properties != null)
-            .Where(s => s.Properties.ContainsKey("state"))
-            .Where(s => s.PlayerCount < s.MaxPlayers); // 슬롯이 남아있는 방
+            .Where(s => s.Properties.ContainsKey("state"));
 
         if (selectedRole == MatchRole.Villain)
         {
-            // 악역: 악역 슬롯이 남아있는 방
             waitingRooms = waitingRooms
                 .Where(s => s.Properties.ContainsKey("villainCount"))
                 .Where(s => (int)s.Properties["villainCount"] < maxVillainCount);
         }
         else if (selectedRole == MatchRole.Actor)
         {
-            // 연기자: 연기자 슬롯이 남아있는 방
             waitingRooms = waitingRooms
                 .Where(s => s.Properties.ContainsKey("actorCount"))
                 .Where(s => (int)s.Properties["actorCount"] < maxActorCount);
@@ -375,14 +373,47 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
             return;
         }
 
-        MatchRole role = ResolveRoleForPlayer(player, true);
-        string nickname = ResolveNicknameForPlayer(player);
-
-        if (role == MatchRole.None)
+        // 토큰 큐에서 역할/닉네임 꺼내기 (클라이언트가 입장 시 전달한 정보)
+        if (player != runner.LocalPlayer && pendingConnectionTokens.Count > 0)
         {
-            Debug.LogWarning($"[FusionLobbyManager] 역할 결정 실패 | Player={player}");
+            var (role, nickname) = pendingConnectionTokens.Dequeue();
+            pendingRoles[player] = role;
+            pendingNicknames[player] = nickname;
+            Debug.Log($"[FusionLobbyManager] 토큰에서 역할 설정 | Player={player} | Role={role} | Nickname={nickname}");
+        }
+
+        MatchRole resolvedRole = ResolveRoleForPlayer(player, true);
+        if (resolvedRole == MatchRole.None)
+        {
+            Debug.Log($"[FusionLobbyManager] 역할 미수신 - 잠시 후 재시도 | Player={player}");
+            StartCoroutine(WaitAndSpawnPlayer(player));
             return;
         }
+
+        SpawnNetworkPlayer(player, resolvedRole);
+    }
+
+    private IEnumerator WaitAndSpawnPlayer(PlayerRef player)
+    {
+        float timer = 0f;
+        while (timer < 5f)
+        {
+            yield return new WaitForSeconds(0.2f);
+            timer += 0.2f;
+
+            MatchRole role = ResolveRoleForPlayer(player, true);
+            if (role != MatchRole.None)
+            {
+                SpawnNetworkPlayer(player, role);
+                yield break;
+            }
+        }
+        Debug.LogWarning($"[FusionLobbyManager] 역할 수신 타임아웃 | Player={player}");
+    }
+
+    private void SpawnNetworkPlayer(PlayerRef player, MatchRole role)
+    {
+        string nickname = ResolveNicknameForPlayer(player);
 
         if (role == MatchRole.Villain && currentVillainCount >= maxVillainCount)
         {
@@ -401,7 +432,7 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
         NetworkObject playerObject = runner.Spawn(networkPlayerPrefab, Vector3.zero, Quaternion.identity, player);
         runner.SetPlayerObject(player, playerObject);
 
-        NetworkPlayer networkPlayer = playerObject.GetComponent<NetworkObject>().GetComponent<NetworkPlayer>();
+        NetworkPlayer networkPlayer = playerObject.GetComponent<NetworkPlayer>();
         networkPlayer.Initialize(nickname, role, true);
 
         spawnedPlayers[player] = networkPlayer;
@@ -409,7 +440,6 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
 
         RecalculateRoleCounts();
 
-        // 세션 프로퍼티 업데이트 (다른 플레이어들이 슬롯 확인용)
         runner.SessionInfo.UpdateCustomProperties(new Dictionary<string, SessionProperty>
         {
             { "villainCount", (SessionProperty)currentVillainCount },
@@ -490,18 +520,36 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
 
         foreach (var obj in runner.GetResumeSnapshotNetworkObjects())
         {
+            // NetworkPlayer 복원
             NetworkPlayer player = obj.GetComponent<NetworkPlayer>();
-            if (player == null) continue;
+            if (player != null)
+            {
+                PlayerRef owner = obj.InputAuthority;
+                spawnedPlayers[owner] = player;
+                registeredPlayers[owner] = player;
+                Debug.Log($"[FusionLobbyManager] NetworkPlayer 복원 → Player={owner} | Nickname={player.Nickname} | Role={player.RoleValue}");
+                continue;
+            }
 
-            PlayerRef owner = obj.InputAuthority;
-            spawnedPlayers[owner] = player;
-            registeredPlayers[owner] = player;
-            Debug.Log($"[FusionLobbyManager] 복원됨 → Player={owner} | Nickname={player.Nickname} | Role={player.RoleValue}");
+            // 캐릭터 오브젝트 복원
+            var actorCtrl = obj.GetComponent<ActorController>();
+            var killerCtrl = obj.GetComponent<KillerController>();
+            if (actorCtrl != null || killerCtrl != null)
+            {
+                obj.gameObject.SetActive(true);
+                Debug.Log($"[FusionLobbyManager] 캐릭터 복원 → {obj.name}");
+            }
+
+            // 모든 NetworkObject StateAuthority 요청
+            if (runner.IsServer && !obj.HasStateAuthority)
+            {
+                runner.SetPlayerObject(obj.InputAuthority, obj);
+            }
         }
 
         RecalculateRoleCounts();
         UpdatePlayerCountUI();
-        TryStartCharacterSelectScene();
+        Debug.Log("[FusionLobbyManager] HostMigrationResume 완료");
     }
 
     private bool IsMatchReadyToStart() => currentVillainCount >= maxVillainCount && currentActorCount >= maxActorCount;
@@ -657,18 +705,19 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
 
     private MatchRole ResolveRoleForPlayer(PlayerRef player, bool saveResolvedRole)
     {
+        // pendingRoles에 저장된 역할 우선 사용
         if (pendingRoles.TryGetValue(player, out MatchRole savedRole) && savedRole != MatchRole.None)
             return savedRole;
 
-        MatchRole resolvedRole = MatchRole.None;
-        if (player == runner.LocalPlayer) resolvedRole = selectedRole;
-        else if (selectedRole == MatchRole.Villain) resolvedRole = MatchRole.Actor;
-        else if (selectedRole == MatchRole.Actor) resolvedRole = MatchRole.Villain;
+        // 로컬 플레이어는 selectedRole 사용
+        if (player == runner.LocalPlayer)
+        {
+            if (saveResolvedRole) pendingRoles[player] = selectedRole;
+            return selectedRole;
+        }
 
-        if (saveResolvedRole && resolvedRole != MatchRole.None)
-            pendingRoles[player] = resolvedRole;
-
-        return resolvedRole;
+        // 다른 플레이어는 pendingRoles에 없으면 None 반환 (역할 수신 대기)
+        return MatchRole.None;
     }
 
     private string ResolveNicknameForPlayer(PlayerRef player)
@@ -684,9 +733,51 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
         return nickname;
     }
 
-    public void OnConnectedToServer(NetworkRunner runner) { }
+    public void SetPendingRole(PlayerRef player, MatchRole role, string nickname)
+    {
+        pendingRoles[player] = role;
+        if (!string.IsNullOrEmpty(nickname))
+            pendingNicknames[player] = nickname;
+        Debug.Log($"[FusionLobbyManager] SetPendingRole | Player={player} | Role={role} | Nickname={nickname}");
+    }
+
+    public void OnConnectedToServer(NetworkRunner runner)
+    {
+        Debug.Log("[FusionLobbyManager] 서버 연결 완료 - 역할 전송");
+        // 클라이언트가 연결되면 즉시 역할을 pendingRoles에 저장
+        pendingRoles[runner.LocalPlayer] = selectedRole;
+        pendingNicknames[runner.LocalPlayer] = PlayerSession.Instance?.Nickname ?? $"Player_{runner.LocalPlayer.PlayerId}";
+    }
     public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
-    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
+    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
+    {
+        if (token != null && token.Length > 0)
+        {
+            try
+            {
+                string tokenStr = System.Text.Encoding.UTF8.GetString(token);
+                string[] parts = tokenStr.Split('|');
+                if (parts.Length >= 2)
+                {
+                    int roleValue = int.Parse(parts[0]);
+                    string nickname = parts[1];
+                    MatchRole role = (MatchRole)roleValue;
+
+                    // 연결 요청한 플레이어의 역할을 미리 저장
+                    // request.Accept()는 항상 호출해야 연결이 수락됨
+                    Debug.Log($"[FusionLobbyManager] 연결 요청 | Role={role} | Nickname={nickname}");
+
+                    // 토큰 데이터를 임시 저장 (PlayerRef는 아직 모름)
+                    pendingConnectionTokens.Enqueue((role, nickname));
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[FusionLobbyManager] 토큰 파싱 실패: {e.Message}");
+            }
+        }
+        request.Accept();
+    }
     public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }
     public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }
 

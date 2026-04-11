@@ -22,10 +22,12 @@ public class ActorInteraction : MonoBehaviour
     private float nextTriggerTime;
     private bool isMiniGameActive = false;
     private bool hasPickedUpFilm = false;
+    // 미니게임 진행 중 여부 (ActorController에서 이동 잠금용)
+    public bool IsInMiniGame => isActing || isMiniGameActive || isVillainMiniGameActive || activeVillainCam != null;
     private int scriptCount = 0;           // 각본 보유 수 (최대 3개)
     private const int maxScriptCount = 3;
-    public int ScriptCount => scriptCount; // InventoryHUD에서 읽기용
     public bool HasScript => scriptCount > 0;
+    public int ScriptCount => scriptCount; // InventoryHUD용
     private float spawnDelayTimer = 0f;
 
     // ─── 악역 카메라 미니게임 ─────────────────
@@ -33,15 +35,7 @@ public class ActorInteraction : MonoBehaviour
     private bool isVillainMiniGameActive = false;
     private float villainMiniGameTime = 0f;
     private float villainPauseTimer = 0f;
-    private bool villainPaused = false;
-
-    // ─── 구출 시스템 ──────────────────────────
-    private bool isRescuing = false;           // 구출 중 여부
-    private float rescueTimer = 0f;            // 구출 진행 시간
-    private float rescueDuration = 3f;         // 구출 완료까지 필요 시간
-    private ActorController rescueTarget = null; // 구출 대상
-    private Vector3 rescueStartPos;            // 구출 시작 위치 (움직임 감지용)
-    private const float rescueRange = 2f;      // 구출 감지 범위 // 성공 후 1초 멈춤
+    private bool villainPaused = false; // 성공 후 1초 멈춤
 
     private ActorController actorController;
     private NetworkObject networkObject;
@@ -73,31 +67,21 @@ public class ActorInteraction : MonoBehaviour
         }
         if (!actorController.HasInputAuthority) return;
 
-        // 구출 진행 중
-        if (isRescuing)
-        {
-            HandleRescue();
-            return;
-        }
-
         // ─── 악역 카메라 미니게임 처리 ───────────
-        if (activeVillainCam != null)
+        // IsCarried 상태이거나 이미 VillainCamera 미니게임 진행 중인 경우
+        if (activeVillainCam != null || actorController.IsCarried)
         {
             HandleVillainCameraGame();
             return;
         }
 
-        // 본인이 대상인 VillainCamera만 감지
-        if (actorController.IsCarried)
+        // 잡히지 않은 상태에서 VillainCamera가 활성화됐는지 감지
+        if (!actorController.IsCarried && activeVillainCam == null)
         {
             var cams = FindObjectsByType<VillainCamera>(FindObjectsSortMode.None);
             foreach (var cam in cams)
             {
-                if (!cam.IsMiniGameActiveNet) continue;
-
-                // 대상 연기자가 본인인지 확인
-                var myNetObj = actorController.GetComponent<NetworkObject>();
-                if (myNetObj != null && cam.TargetActorId == myNetObj.Id)
+                if (cam.IsMiniGameActiveNet)
                 {
                     activeVillainCam = cam;
                     StartVillainMiniGameLoop();
@@ -331,7 +315,9 @@ public class ActorInteraction : MonoBehaviour
 
         if (nearFilm != null) { GameStateManager.Instance?.ShowFKeyHint(hint); return; }
 
-        if (!hasPickedUpFilm) { GameStateManager.Instance?.HideFKeyHint(); return; }
+        // 팀원 누구든 필름 획득 시 모든 연기자 각본 획득 가능
+        bool teamHasFilm = GameStateManager.Instance != null && GameStateManager.Instance.HasFilm;
+        if (!teamHasFilm) { GameStateManager.Instance?.HideFKeyHint(); return; }
 
         var scripts = FindObjectsByType<ScriptItem>(FindObjectsSortMode.None);
         foreach (var s in scripts)
@@ -357,23 +343,7 @@ public class ActorInteraction : MonoBehaviour
         }
 
         if (nearCamera != null) GameStateManager.Instance?.ShowFKeyHint(hint);
-        else
-        {
-            // 카메라 없을 때 잡힌 팀원 감지 (구출 가능)
-            var actors = FindObjectsByType<ActorController>(FindObjectsSortMode.None);
-            foreach (var actor in actors)
-            {
-                if (actor == actorController) continue; // 본인 제외
-                if (!actor.IsCarried && actor.GetComponent<ActorInteraction>()?.activeVillainCam == null) continue;
-                float dist = Vector3.Distance(transform.position, actor.transform.position);
-                if (dist < rescueRange)
-                {
-                    GameStateManager.Instance?.ShowFKeyHint("구출하기");
-                    return;
-                }
-            }
-            GameStateManager.Instance?.HideFKeyHint();
-        }
+        else GameStateManager.Instance?.HideFKeyHint();
     }
 
     // ─── F키 입력 처리 ─────────────────────────
@@ -383,6 +353,7 @@ public class ActorInteraction : MonoBehaviour
         {
             hasPickedUpFilm = true;
             actorController.RPC_PickUpFilm(nearFilm.GetComponent<NetworkObject>().Id);
+            actorController.RPC_NotifyFilmPickedUp(); // 팀 전체에 필름 획득 알림
             return;
         }
 
@@ -390,12 +361,11 @@ public class ActorInteraction : MonoBehaviour
         {
             if (scriptCount >= maxScriptCount)
             {
-                Debug.Log("[ActorInteraction] 각본 최대 보유 수 초과 (3개)");
+                Debug.Log("[ActorInteraction] 각본 최대 보유 수 초과");
                 return;
             }
             scriptCount++;
             actorController.RPC_PickUpScript(nearScript.GetComponent<NetworkObject>().Id);
-            Debug.Log($"[ActorInteraction] 각본 획득 | 보유: {scriptCount}/{maxScriptCount}");
             return;
         }
 
@@ -412,7 +382,6 @@ public class ActorInteraction : MonoBehaviour
                     {
                         scriptCount--;
                         linkedCamera = nearCamera;
-                        Debug.Log($"[ActorInteraction] 각본 소모 | 남은: {scriptCount}/{maxScriptCount}");
                     }
 
                     isActing = true;
@@ -436,114 +405,10 @@ public class ActorInteraction : MonoBehaviour
         {
             activeCamera = null;
             timer = 0f;
-
-            // 구출 가능한 팀원 감지 및 구출 시작
-            if (Input.GetKeyDown(KeyCode.F))
-            {
-                var actors = FindObjectsByType<ActorController>(FindObjectsSortMode.None);
-                foreach (var actor in actors)
-                {
-                    if (actor == actorController) continue;
-                    var targetInteraction = actor.GetComponent<ActorInteraction>();
-                    if (targetInteraction?.activeVillainCam == null && !actor.IsCarried) continue;
-                    float dist = Vector3.Distance(transform.position, actor.transform.position);
-                    if (dist < rescueRange)
-                    {
-                        StartRescue(actor);
-                        return;
-                    }
-                }
-            }
         }
     }
 
-    // ─── 구출 시스템 ───────────────────────────
-    private void StartRescue(ActorController target)
-    {
-        isRescuing = true;
-        rescueTimer = 0f;
-        rescueTarget = target;
-        rescueStartPos = transform.position;
-        actorController.RPC_PlayEmotion("Rescue"); // 구출 애니메이션
-        GameStateManager.Instance?.HideFKeyHint();
-        Debug.Log($"[ActorInteraction] 구출 시작: {target.name}");
-    }
-
-    private void HandleRescue()
-    {
-        if (!isRescuing || rescueTarget == null) return;
-
-        // 움직이면 구출 실패
-        float moved = Vector3.Distance(transform.position, rescueStartPos);
-        if (moved > 0.3f)
-        {
-            CancelRescue();
-            return;
-        }
-
-        rescueTimer += Time.deltaTime;
-
-        if (rescueTimer >= rescueDuration)
-        {
-            CompleteRescue();
-        }
-    }
-
-    private void CancelRescue()
-    {
-        isRescuing = false;
-        rescueTimer = 0f;
-        rescueTarget = null;
-        actorController.RPC_ReturnToIdle();
-        Debug.Log("[ActorInteraction] 구출 실패 - 움직임 감지");
-    }
-
-    private void CompleteRescue()
-    {
-        if (rescueTarget == null) return;
-
-        // 잡힌 연기자의 VillainCamera 미니게임 일시 중단
-        var targetInteraction = rescueTarget.GetComponent<ActorInteraction>();
-        if (targetInteraction != null)
-        {
-            targetInteraction.PauseVillainMiniGame();
-        }
-
-        isRescuing = false;
-        rescueTimer = 0f;
-        rescueTarget = null;
-        actorController.RPC_ReturnToIdle();
-        Debug.Log("[ActorInteraction] 구출 성공!");
-    }
-
-    // 악역 미니게임 일시 중단 (구출당했을 때 외부에서 호출)
-    public void PauseVillainMiniGame()
-    {
-        if (activeVillainCam == null) return;
-
-        // 게이지 현재 값 저장 후 미니게임 패널 숨김
-        MiniGameManager.Instance?.HideAll();
-        isVillainMiniGameActive = false;
-        villainPaused = false;
-
-        // IsCarried 해제 (구출됨)
-        if (actorController.HasStateAuthority)
-        {
-            actorController.IsCarried = false;
-            actorController.NetIsCarried = false;
-            actorController.IsLockedByVillain = false;
-        }
-
-        // VillainCamera는 유지 (게이지값 보존) - isMiniGameActive만 false로
-        activeVillainCam.RPC_StopMiniGame();
-
-        // activeVillainCam은 null로 하지 않음 - 다시 잡혔을 때 이어서 진행
-        // 단 현재 actPoint는 VillainCamera에 저장됨
-        float savedActPoint = activeVillainCam.actPoint;
-        activeVillainCam = null;
-
-        Debug.Log($"[ActorInteraction] 구출됨 - 게이지 {savedActPoint} 저장");
-    }
+    // ─── 미니게임 ───────────────────────────────
     private void CheckMiniGameTrigger()
     {
         timer += Time.deltaTime;

@@ -18,6 +18,10 @@ public class InfoUIController : MonoBehaviour
 
     private void Start()
     {
+        // 커서 복구 (게임플레이 씬에서 잠길 수 있으므로)
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
         // 닉네임 표시
         if (PlayerSession.Instance != null && PlayerSession.Instance.IsLoggedIn)
         {

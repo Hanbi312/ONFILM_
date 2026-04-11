@@ -53,6 +53,10 @@ public class CharacterSelectUIController : MonoBehaviour
     [SerializeField] private TMP_Text readyButtonText;
 
 
+    [Header("── 경고 UI ────────────────────────────")]
+    [SerializeField] private GameObject warningPanel;    // 경고 패널 (무기 미선택 시 표시)
+    [SerializeField] private TMP_Text warningText;       // 경고 메시지 텍스트
+
     // ─────────────────────────────────────────
     // [선택 화면 - SelectPanel]
     // ─────────────────────────────────────────
@@ -195,13 +199,7 @@ public class CharacterSelectUIController : MonoBehaviour
 
         // 대기 화면일 때 초상화 실시간 갱신 (상대방 선택 반영)
         if (waitPanel != null && waitPanel.activeSelf)
-        {
             RefreshWaitPanel();
-        }
-        else
-        {
-            Debug.Log($"[CharacterSelectUI] waitPanel 비활성 | waitPanel={waitPanel != null} | activeSelf={waitPanel?.activeSelf}");
-        }
 
         // 서버에서 전원 준비 확인 → 게임플레이 씬 이동
         if (runner != null && runner.IsServer)
@@ -247,20 +245,18 @@ public class CharacterSelectUIController : MonoBehaviour
     {
         currentTab = tab;
         ClearGrid();
-
-        // 탭 전환해도 이미 선택한 캐릭터/무기는 유지
-        // selectButton은 둘 다 선택됐을 때만 활성화
-        RefreshSelectButton();
-
+        pendingCharacter = null;
+        selectButton.interactable = false;
         if (selectButtonText != null) selectButtonText.text = "선택하기";
 
-        ClearPreview();
+        ClearPreview(); // 3D 모델 초기화
 
         if (weaponInfoPanel != null)
             weaponInfoPanel.SetActive(false);
 
         if (tab == Tab.Weapon)
         {
+            // 무기 탭: SelectPanel은 그대로 두고 WeaponPanel을 위에 오버레이로 표시
             if (weaponPanel != null)
             {
                 weaponPanel.SetActive(true);
@@ -269,6 +265,7 @@ public class CharacterSelectUIController : MonoBehaviour
         }
         else
         {
+            // 연기자/악역 탭: WeaponPanel 닫기
             if (weaponPanel != null) weaponPanel.SetActive(false);
             if (gridContent != null) gridContent.gameObject.SetActive(true);
 
@@ -452,7 +449,7 @@ public class CharacterSelectUIController : MonoBehaviour
         if (myRole == MatchRole.Villain)
         {
             pendingWeapon = data;
-            RefreshSelectButton();
+            selectButton.interactable = true;
             if (selectButtonText != null) selectButtonText.text = "선택하기";
         }
     }
@@ -489,41 +486,25 @@ public class CharacterSelectUIController : MonoBehaviour
     // ═══════════════════════════════════════════════════════════
     private void OnClickSelect()
     {
-        bool changed = false;
-
-        if (pendingWeapon != null)
+        if (currentTab == Tab.Weapon && pendingWeapon != null)
         {
             CharacterSelectSession.Instance?.SetWeapon(pendingWeapon);
             Debug.Log($"[CharacterSelectUI] 무기 확정: {pendingWeapon.weaponName}");
-            changed = true;
-        }
 
-        if (pendingCharacter != null)
+            if (selectButtonText != null)
+                selectButtonText.text = "선택완료";
+        }
+        else if (pendingCharacter != null)
         {
             CharacterSelectSession.Instance?.SetCharacter(pendingCharacter);
             Debug.Log($"[CharacterSelectUI] 캐릭터 확정: {pendingCharacter.characterName}");
-            changed = true;
-        }
 
-        if (changed)
-        {
             if (selectButtonText != null)
                 selectButtonText.text = "선택완료";
-            SendSelectionRPC();
         }
-    }
 
-    // 선택하기 버튼 활성화 갱신
-    // 악역: 캐릭터 또는 무기 중 하나라도 pending이면 활성화
-    // 연기자: 캐릭터 pending이면 활성화
-    private void RefreshSelectButton()
-    {
-        if (selectButton == null) return;
-
-        if (myRole == MatchRole.Villain)
-            selectButton.interactable = pendingCharacter != null || pendingWeapon != null;
-        else
-            selectButton.interactable = pendingCharacter != null;
+        // 선택 결과를 즉시 서버에 전송 → 상대방 화면에 초상화 표시
+        SendSelectionRPC();
     }
 
     // 뒤로가기 버튼 - 선택 화면 → 대기 화면으로 복귀
@@ -567,35 +548,29 @@ public class CharacterSelectUIController : MonoBehaviour
             if (player == null || !player.CanReadNetworkState()) continue;
 
             MatchRole role = player.GetRole();
+
+            // NetworkPlayer에 저장된 이름으로 CharacterData 검색
             string selectedName = player.SelectedCharacterName.ToString();
             CharacterData data = null;
-
-            Debug.Log($"[CharacterSelectUI] 팀원 확인 | {player.Nickname} | Role={role} | 선택={selectedName}");
 
             if (!string.IsNullOrEmpty(selectedName) && session.AllCharacters != null)
                 data = session.AllCharacters.Find(c => c.characterName == selectedName);
 
-            // 로컬 플레이어는 Session에서 직접 읽기
+            // 로컬 플레이어는 Session에서 직접 읽기 (RPC 전송 전에도 즉시 반영)
             if (player == myNetworkPlayer)
                 data = session.SelectedCharacter ?? data;
 
             if (role == MatchRole.Actor)
             {
                 if (data != null && actorPortraitSlots != null && actorSlotIndex < actorPortraitSlots.Length)
-                {
                     actorPortraitSlots[actorSlotIndex].sprite = data.portrait;
-                    Debug.Log($"[CharacterSelectUI] 연기자 슬롯{actorSlotIndex} 프로필 설정: {data.characterName}");
-                }
                 actorSlotIndex++;
             }
 
             if (role == MatchRole.Villain)
             {
                 if (data != null && villainPortraitInWait != null)
-                {
                     villainPortraitInWait.sprite = data.portrait;
-                    Debug.Log($"[CharacterSelectUI] 악역 프로필 설정: {data.characterName}");
-                }
             }
         }
     }
@@ -638,12 +613,52 @@ public class CharacterSelectUIController : MonoBehaviour
     public void OnClickReady()
     {
         if (myNetworkPlayer == null || !myNetworkPlayer.CanReadNetworkState()) return;
-        if (!IsSelectionComplete()) return;
+
+        // 악역인데 무기 미선택 시 경고
+        if (myRole == MatchRole.Villain)
+        {
+            var session = CharacterSelectSession.Instance;
+            if (session?.SelectedWeapon == null)
+            {
+                ShowWarning("무기를 선택해주세요!");
+                return;
+            }
+            if (session?.SelectedCharacter == null)
+            {
+                ShowWarning("캐릭터를 선택해주세요!");
+                return;
+            }
+        }
+        else if (myRole == MatchRole.Actor)
+        {
+            var session = CharacterSelectSession.Instance;
+            if (session?.SelectedCharacter == null)
+            {
+                ShowWarning("캐릭터를 선택해주세요!");
+                return;
+            }
+        }
+
+        HideWarning();
 
         bool current = myNetworkPlayer.GetSafeReady();
         bool next = !current;
         myNetworkPlayer.RPC_SetReady(next);
         Debug.Log($"[CharacterSelectUI] OnClickReady | {myNetworkPlayer.Nickname} | {current} -> {next}");
+    }
+
+    private void ShowWarning(string message)
+    {
+        if (warningPanel != null) warningPanel.SetActive(true);
+        if (warningText != null) warningText.text = message;
+        // 3초 후 자동으로 숨김
+        CancelInvoke(nameof(HideWarning));
+        Invoke(nameof(HideWarning), 3f);
+    }
+
+    private void HideWarning()
+    {
+        if (warningPanel != null) warningPanel.SetActive(false);
     }
 
     // 시간 초과 시 강제 준비

@@ -407,6 +407,7 @@ MonoBehaviour:
   mouseSensitivity: 2
   pitchMin: -35
   pitchMax: 70
+  cameraSmoothing: 20
   defaultHealth: 2
   actorLight: {fileID: 254432207806605173}
   _Health: 0
@@ -416,6 +417,12 @@ MonoBehaviour:
     _value: 0
   _SelfHealTime: 0
   _IsInjury:
+    _value: 0
+  _IsCarried:
+    _value: 0
+  _NetIsCarried:
+    _value: 0
+  _IsLockedByVillain:
     _value: 0
 --- !u!114 &8037176829365030310
 MonoBehaviour:
