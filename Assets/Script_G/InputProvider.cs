@@ -3,45 +3,67 @@ using Fusion.Sockets;
 using System.Collections.Generic;
 using UnityEngine;
 
-// NetworkRunner의 입력 수집 콜백
-// KeySetting 시스템은 오직 여기서만 Input.GetKey()로 읽음
-// 씬에 빈 오브젝트를 만들고 이 컴포넌트를 붙인 뒤,
-// NetworkRunner에 AddCallbacks(this)로 등록해야 함
 public class InputProvider : MonoBehaviour, INetworkRunnerCallbacks
 {
+    // KeyManager가 늦게 뜨거나 없어도 항상 동작하도록 기본값 하드코딩
+    private static readonly Dictionary<KeyAction, KeyCode> fallbackKeys = new Dictionary<KeyAction, KeyCode>
+    {
+        { KeyAction.UP,          KeyCode.W           },
+        { KeyAction.DOWN,        KeyCode.S           },
+        { KeyAction.LEFT,        KeyCode.A           },
+        { KeyAction.RIGHT,       KeyCode.D           },
+        { KeyAction.WALK,        KeyCode.LeftShift   },
+        { KeyAction.SIT,         KeyCode.LeftControl },
+        { KeyAction.INTERACTION, KeyCode.Mouse0      },
+        { KeyAction.SKILL,       KeyCode.Mouse1      },
+        { KeyAction.TRAITA,      KeyCode.E           },
+        { KeyAction.TRAITB,      KeyCode.R           },
+        { KeyAction.HEAL,        KeyCode.H           },
+        { KeyAction.VAULT,       KeyCode.V           },
+    };
+
+    private void Awake()
+    {
+        // KeySetting이 비어있으면 여기서 기본값으로 채움
+        if (KeySetting.keys.Count == 0)
+        {
+            foreach (var pair in fallbackKeys)
+                KeySetting.keys[pair.Key] = pair.Value;
+            Debug.Log("[InputProvider] KeySetting 비어있어 기본값으로 초기화");
+        }
+    }
+
     bool GetKeySafe(KeyAction action)
     {
-        if (!KeySetting.keys.ContainsKey(action))
-            return false;
-
-        return Input.GetKey(KeySetting.keys[action]);
+        // KeySetting 우선, 없으면 fallback 사용
+        if (KeySetting.keys.TryGetValue(action, out var key))
+            return Input.GetKey(key);
+        if (fallbackKeys.TryGetValue(action, out var fallback))
+            return Input.GetKey(fallback);
+        return false;
     }
 
     public void OnInput(NetworkRunner runner, NetworkInput input)
     {
-        Debug.Log(KeySetting.keys.Count);
-
         var data = new PlayerNetworkInput();
 
-        // 이동
         Vector2 move = Vector2.zero;
-        if (GetKeySafe(KeyAction.LEFT)) move.x -= 1f;
+        if (GetKeySafe(KeyAction.LEFT))  move.x -= 1f;
         if (GetKeySafe(KeyAction.RIGHT)) move.x += 1f;
-        if (GetKeySafe(KeyAction.UP)) move.y += 1f;
-        if (GetKeySafe(KeyAction.DOWN)) move.y -= 1f;
+        if (GetKeySafe(KeyAction.UP))    move.y += 1f;
+        if (GetKeySafe(KeyAction.DOWN))  move.y -= 1f;
         data.move = move.normalized;
 
-        // 마우스 시선
         data.look = new Vector2(
             Input.GetAxisRaw("Mouse X"),
             Input.GetAxisRaw("Mouse Y")
         );
 
-        // 버튼
-        data.buttons.Set(PlayerNetworkInput.WALK, GetKeySafe(KeyAction.WALK));
-        data.buttons.Set(PlayerNetworkInput.SIT, GetKeySafe(KeyAction.SIT));
-        data.buttons.Set(PlayerNetworkInput.HEAL, GetKeySafe(KeyAction.HEAL));
-        data.buttons.Set(PlayerNetworkInput.VAULT, GetKeySafe(KeyAction.VAULT));
+        data.buttons.Set(PlayerNetworkInput.WALK,   GetKeySafe(KeyAction.WALK));
+        data.buttons.Set(PlayerNetworkInput.SIT,    GetKeySafe(KeyAction.SIT));
+        data.buttons.Set(PlayerNetworkInput.HEAL,   GetKeySafe(KeyAction.HEAL));
+        data.buttons.Set(PlayerNetworkInput.VAULT,  GetKeySafe(KeyAction.VAULT));
+        data.buttons.Set(PlayerNetworkInput.ATTACK, GetKeySafe(KeyAction.INTERACTION));
 
         input.Set(data);
     }

@@ -39,12 +39,14 @@ public class CharacterSelectUIController : MonoBehaviour
     // 각 슬롯은 가로로 긴 카드 형태 (사진 1번 기준)
     // 슬롯 안의 왼쪽 정사각형 Image에 선택한 초상화가 표시됨
     [SerializeField] private Image[] actorPortraitSlots;    // 연기자 초상화 표시 슬롯 배열
+    [SerializeField] private GameObject[] actorReadyIndicators;  // 연기자 슬롯별 준비완료 UI (actorPortraitSlots와 순서 동일)
 
     // 왼쪽 상단: 캐릭터 선택 버튼 (클릭 시 SelectPanel로 전환)
     [SerializeField] private Button openSelectPanelButton;  // "캐릭터" 버튼
 
     // 오른쪽: 악역이 선택한 캐릭터 초상화 (큰 원 안)
     [SerializeField] private Image villainPortraitInWait;   // 악역 선택 결과 이미지
+    [SerializeField] private GameObject villainReadyIndicator;   // 악역 준비완료 UI
 
     // 하단 오른쪽: 타이머 + 준비 버튼
     [SerializeField] private TMP_Text timerText;            // "60초" 카운트다운
@@ -541,6 +543,13 @@ public class CharacterSelectUIController : MonoBehaviour
         var allPlayers = lobbyManager.GetAllNetworkPlayers();
         if (allPlayers == null) return;
 
+        // 준비완료 UI 먼저 전부 숨기기
+        if (actorReadyIndicators != null)
+            foreach (var indicator in actorReadyIndicators)
+                if (indicator != null) indicator.SetActive(false);
+        if (villainReadyIndicator != null)
+            villainReadyIndicator.SetActive(false);
+
         int actorSlotIndex = 0;
 
         foreach (var player in allPlayers)
@@ -548,6 +557,7 @@ public class CharacterSelectUIController : MonoBehaviour
             if (player == null || !player.CanReadNetworkState()) continue;
 
             MatchRole role = player.GetRole();
+            bool isReady = player.GetSafeReady();
 
             // NetworkPlayer에 저장된 이름으로 CharacterData 검색
             string selectedName = player.SelectedCharacterName.ToString();
@@ -564,6 +574,12 @@ public class CharacterSelectUIController : MonoBehaviour
             {
                 if (data != null && actorPortraitSlots != null && actorSlotIndex < actorPortraitSlots.Length)
                     actorPortraitSlots[actorSlotIndex].sprite = data.portrait;
+
+                // 준비완료 UI 표시
+                if (actorReadyIndicators != null && actorSlotIndex < actorReadyIndicators.Length)
+                    if (actorReadyIndicators[actorSlotIndex] != null)
+                        actorReadyIndicators[actorSlotIndex].SetActive(isReady);
+
                 actorSlotIndex++;
             }
 
@@ -571,6 +587,10 @@ public class CharacterSelectUIController : MonoBehaviour
             {
                 if (data != null && villainPortraitInWait != null)
                     villainPortraitInWait.sprite = data.portrait;
+
+                // 준비완료 UI 표시
+                if (villainReadyIndicator != null)
+                    villainReadyIndicator.SetActive(isReady);
             }
         }
     }
@@ -602,9 +622,9 @@ public class CharacterSelectUIController : MonoBehaviour
         if (readyButton == null) return;
 
         bool networkReady = myNetworkPlayer != null && myNetworkPlayer.CanReadNetworkState();
-        bool selectionDone = IsSelectionComplete();
 
-        readyButton.interactable = networkReady && selectionDone;
+        // 네트워크만 준비되면 버튼 활성화 (선택 완료 여부는 OnClickReady에서 경고로 처리)
+        readyButton.interactable = networkReady;
 
         if (readyButtonText != null && networkReady)
             readyButtonText.text = myNetworkPlayer.GetSafeReady() ? "준비해제" : "준비하기";

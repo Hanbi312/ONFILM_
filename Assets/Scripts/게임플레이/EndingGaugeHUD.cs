@@ -7,9 +7,9 @@ public class EndingGaugeHUD : MonoBehaviour
     [Header("게이지 칸 (왼쪽→오른쪽 순서로 연결)")]
     [SerializeField] private Image[] gaugeSlots; // 총 8칸
 
-    [Header("스프라이트")]
-    [SerializeField] private Sprite happySprite;  // 파란 마름모 스프라이트
-    [SerializeField] private Sprite badSprite;    // 빨간 마름모 스프라이트
+    [Header("스프라이트 (슬롯 순서와 동일하게 연결)")]
+    [SerializeField] private Sprite[] happySprites; // 왼쪽 4칸 스프라이트 (인덱스 0~3)
+    [SerializeField] private Sprite[] badSprites;   // 오른쪽 4칸 스프라이트 (인덱스 0~3)
 
     [Header("설정")]
     [SerializeField] private int maxHappyCount = 4;
@@ -32,7 +32,6 @@ public class EndingGaugeHUD : MonoBehaviour
         int tragedyPoint = GameStateManager.Instance.TragedyPoint;
 
         if (cameraOff == lastCameraOffCount && tragedyPoint == lastTragedyPoint) return;
-
         lastCameraOffCount = cameraOff;
         lastTragedyPoint = tragedyPoint;
 
@@ -52,32 +51,24 @@ public class EndingGaugeHUD : MonoBehaviour
             if (i < maxHappyCount)
             {
                 // 왼쪽 4칸: 해피엔딩 (왼쪽부터 채워짐)
-                if (i < happyCount)
-                {
-                    gaugeSlots[i].sprite = happySprite;
-                    gaugeSlots[i].color = Color.white;
-                }
-                else
-                {
-                    // 빈 칸 - 투명 처리
-                    gaugeSlots[i].sprite = null;
-                    gaugeSlots[i].color = Color.clear;
-                }
+                // happySprites[i] = 슬롯 i번에 해당하는 스프라이트
+                bool filled = i < happyCount;
+                Sprite sprite = (happySprites != null && i < happySprites.Length) ? happySprites[i] : null;
+
+                gaugeSlots[i].sprite = filled ? sprite : null;
+                gaugeSlots[i].color  = filled ? Color.white : Color.clear;
             }
             else
             {
                 // 오른쪽 4칸: 베드엔딩 (오른쪽부터 채워짐)
-                int badIndex = totalSlots - 1 - i;
-                if (badIndex < badCount)
-                {
-                    gaugeSlots[i].sprite = badSprite;
-                    gaugeSlots[i].color = Color.white;
-                }
-                else
-                {
-                    gaugeSlots[i].sprite = null;
-                    gaugeSlots[i].color = Color.clear;
-                }
+                int badSlotIndex = totalSlots - 1 - i; // 오른쪽 끝부터 채우기 위한 인덱스
+                bool filled = badSlotIndex < badCount;
+                // badSprites 배열은 오른쪽 슬롯 기준 인덱스로 접근 (슬롯4→badSprites[0], 슬롯5→badSprites[1]...)
+                int badSpriteIndex = i - maxHappyCount;
+                Sprite sprite = (badSprites != null && badSpriteIndex < badSprites.Length) ? badSprites[badSpriteIndex] : null;
+
+                gaugeSlots[i].sprite = filled ? sprite : null;
+                gaugeSlots[i].color  = filled ? Color.white : Color.clear;
             }
         }
     }

@@ -6,8 +6,9 @@ using UnityEngine;
 public class WeaponFollower : MonoBehaviour
 {
     public Transform target; // hand.R 본
-    public Vector3 positionOffset = Vector3.zero;   // 위치 오프셋 (Inspector에서 조정)
-    public Vector3 rotationOffset = Vector3.zero;   // 회전 오프셋 (Inspector에서 조정)
+    public KillerController ownerKiller; // 이 무기를 소유한 킬러 (데미지 판정용)
+    public Vector3 positionOffset = Vector3.zero;
+    public Vector3 rotationOffset = Vector3.zero;
 
     private void Start()
     {

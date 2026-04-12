@@ -29,6 +29,7 @@ public class PoseGame : MonoBehaviour
 
     Generator generator;
     SecurityCamera securityCamera;
+    VillainCamera villainCamera;
     System.Action<string> onSuccess; // 성공 시 animationTrigger 전달
     System.Action onFail;
 
@@ -66,6 +67,7 @@ public class PoseGame : MonoBehaviour
     // VillainCamera용 오버로드
     public void SetupMiniGame(VillainCamera cam, System.Action<string> successCallback = null, System.Action failCallback = null)
     {
+        villainCamera = cam;
         securityCamera = null;
         generator = null;
         onSuccess = successCallback;
@@ -132,6 +134,7 @@ public class PoseGame : MonoBehaviour
 
             if (generator != null) generator.EndMiniGame();
             else if (securityCamera != null) securityCamera.EndMiniGame();
+            else if (villainCamera != null) villainCamera.EndMiniGame();
         }
 
         onSuccess = null;
@@ -146,6 +149,6 @@ public class PoseGame : MonoBehaviour
 
         if (generator != null) generator.EndMiniGame();
         else if (securityCamera != null) securityCamera.EndMiniGame();
+        else if (villainCamera != null) villainCamera.EndMiniGame();
     }
 }
-

@@ -2896,6 +2896,7 @@ MonoBehaviour:
   interactRange: 2
   minTriggerTime: 2
   maxTriggerTime: 5
+  healOtherRange: 2
 --- !u!114 &4369787507869637160
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2932,13 +2933,13 @@ CharacterController:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Height: 2
-  m_Radius: 0.5
+  m_Height: 1.56
+  m_Radius: 0.16
   m_SlopeLimit: 45
   m_StepOffset: 0.3
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001
-  m_Center: {x: 0, y: 0.82, z: 0}
+  m_Center: {x: 0.03, y: 0.77, z: 0}
 --- !u!114 &8820168704023519692
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2968,6 +2969,7 @@ MonoBehaviour:
   mouseSensitivity: 2
   pitchMin: -35
   pitchMax: 70
+  cameraSmoothing: 30
   defaultHealth: 2
   actorLight: {fileID: 5585778012366594582}
   _Health: 0
@@ -2983,6 +2985,8 @@ MonoBehaviour:
   _NetIsCarried:
     _value: 0
   _IsLockedByVillain:
+    _value: 0
+  _IsBeingHealed:
     _value: 0
 --- !u!1 &9042362121062528323
 GameObject:

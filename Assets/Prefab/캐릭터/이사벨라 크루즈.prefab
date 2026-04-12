@@ -369,13 +369,13 @@ CharacterController:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Height: 2
-  m_Radius: 0.5
+  m_Height: 1.56
+  m_Radius: 0.16
   m_SlopeLimit: 45
   m_StepOffset: 0.3
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001
-  m_Center: {x: 0, y: 0.93, z: 0}
+  m_Center: {x: 0.03, y: 0.77, z: 0}
 --- !u!114 &7428038338904550613
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -405,6 +405,7 @@ MonoBehaviour:
   mouseSensitivity: 2
   pitchMin: -35
   pitchMax: 70
+  cameraSmoothing: 30
   defaultHealth: 2
   actorLight: {fileID: 8596689577911477881}
   _Health: 0
@@ -414,6 +415,14 @@ MonoBehaviour:
     _value: 0
   _SelfHealTime: 0
   _IsInjury:
+    _value: 0
+  _IsCarried:
+    _value: 0
+  _NetIsCarried:
+    _value: 0
+  _IsLockedByVillain:
+    _value: 0
+  _IsBeingHealed:
     _value: 0
 --- !u!114 &-2423576343673947846
 MonoBehaviour:
@@ -450,6 +459,7 @@ MonoBehaviour:
   interactRange: 2
   minTriggerTime: 2
   maxTriggerTime: 5
+  healOtherRange: 2
 --- !u!4 &2190498516157398149 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: bf4c21e449a3d3b4bb483fab4a2f7eb5, type: 3}

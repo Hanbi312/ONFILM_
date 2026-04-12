@@ -52,22 +52,14 @@ public class KeyManager : MonoBehaviour
 
     private void Awake()
     {
+        // 저장된 키 설정 무시 - 항상 기본값으로 초기화
+        PlayerPrefs.DeleteAll();
         KeySetting.keys.Clear();
 
         for (int i = 0; i < (int)KeyAction.KEYCOUNT; i++)
         {
             KeyAction action = (KeyAction)i;
-
-            // 저장된 키가 있으면 불러오고, 없으면 기본값 사용
-            if (PlayerPrefs.HasKey("Key_" + action.ToString()))
-            {
-                int savedKeyCode = PlayerPrefs.GetInt("Key_" + action.ToString());
-                KeySetting.keys.Add(action, (KeyCode)savedKeyCode);
-            }
-            else
-            {
-                KeySetting.keys.Add(action, defaultKeys[i]);
-            }
+            KeySetting.keys.Add(action, defaultKeys[i]);
         }
     }
 

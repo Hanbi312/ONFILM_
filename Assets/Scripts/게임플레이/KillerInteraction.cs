@@ -67,10 +67,23 @@ public class KillerInteraction : MonoBehaviour
         ActorController closest = null;
         float closestDist = interactRange;
 
+        // 현재 악역 카메라 미니게임 진행 중인 연기자 ID 수집 (네트워크 동기화된 값)
+        var busyActorIds = new System.Collections.Generic.HashSet<NetworkId>();
+        var villainCams = FindObjectsByType<VillainCamera>(FindObjectsSortMode.None);
+        foreach (var cam in villainCams)
+        {
+            if (cam.IsMiniGameActiveNet)
+                busyActorIds.Add(cam.TargetActorId);
+        }
+
         foreach (var actor in actors)
         {
             if (!actor.IsDead) continue;
             if (actor.IsCarried) continue;
+
+            // 악역 카메라 미니게임 진행 중인 연기자는 상호작용 불가 (네트워크 동기화 기반)
+            if (actor.Object != null && busyActorIds.Contains(actor.Object.Id)) continue;
+
             float dist = Vector3.Distance(transform.position, actor.transform.position);
             if (dist < closestDist) { closestDist = dist; closest = actor; }
         }
@@ -115,15 +128,16 @@ public class KillerInteraction : MonoBehaviour
         if (cam.spawnPoint != null)
             carriedActor.RPC_Teleport(cam.spawnPoint.position, cam.spawnPoint.rotation);
 
-        // 내려놓기
+        // actorId 미리 저장
         var actorNetId = carriedActor.GetComponent<NetworkObject>().Id;
+
+        // 내려놓기
         killerController.RPC_StopCarry(actorNetId);
-
-        // actPoint는 초기화하지 않고 유지 (구출 후 재잡힘 시 이어서 진행)
-        cam.RPC_StartMiniGame(actorNetId);
-
         carriedActor = null;
         isCarrying = false;
+
+        // 서버에 VillainCamera 활성화 요청 (대상 연기자 ID 포함)
+        cam.RPC_StartMiniGame(actorNetId);
 
         GameStateManager.Instance?.HideFKeyHint();
         Debug.Log("[KillerInteraction] VillainCamera 상호작용 시작 → 연기자 화면에 미니게임 표시");

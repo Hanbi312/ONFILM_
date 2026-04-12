@@ -58,6 +58,31 @@ public class GameplayManager : MonoBehaviour
         StartCoroutine(SendSelectionAndSpawnRoutine());
     }
 
+    /// <summary>
+    /// 플레이어 퇴장 시 FusionLobbyManager → GameStateManager 경유 또는 직접 호출
+    /// 퇴장한 플레이어의 캐릭터를 spawnedCharacters에서 제거 (despawn은 하지 않음)
+    /// 캐릭터는 씬에 남겨두어 나머지 플레이어가 계속 게임 가능
+    /// </summary>
+    public void OnPlayerLeft(PlayerRef player)
+    {
+        if (spawnedCharacters.TryGetValue(player, out var characterObj))
+        {
+            if (characterObj != null)
+            {
+                // 연기자 캐릭터라면 죽은 상태로 처리 (방치된 캐릭터가 게임에 영향 없도록)
+                var actorCtrl = characterObj.GetComponent<ActorController>();
+                if (actorCtrl != null && !actorCtrl.IsDead && actorCtrl.HasStateAuthority)
+                {
+                    actorCtrl.IsDead = true;
+                    Debug.Log($"[GameplayManager] 퇴장 플레이어 캐릭터를 사망 처리 | Player={player}");
+                }
+                // 악역이 나갔으면 그냥 두기 (씬에 남아있는 게 나음)
+            }
+            spawnedCharacters.Remove(player);
+        }
+        Debug.Log($"[GameplayManager] 플레이어 퇴장 처리 완료 | Player={player} | 남은 캐릭터={spawnedCharacters.Count}");
+    }
+
     // ─── 선택 데이터 전송 + 스폰 전체 흐름 ────
     private IEnumerator SendSelectionAndSpawnRoutine()
     {
@@ -350,6 +375,7 @@ public class GameplayManager : MonoBehaviour
                 follower = spawnedWeapon.gameObject.AddComponent<WeaponFollower>();
 
             follower.target = handBone;
+            follower.ownerKiller = character.GetComponent<KillerController>(); // 소유자 킬러 연결
 
             var killerCtrl = character.GetComponent<KillerController>();
             if (killerCtrl != null)

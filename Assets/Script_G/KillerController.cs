@@ -40,7 +40,7 @@ public class KillerController : NetworkBehaviour
     [Networked] private float NetPitch { get; set; }
     [Networked] private float YVelocity { get; set; }
 
-    [Networked] private NetworkBool IsAttacking { get; set; }
+    [Networked] public NetworkBool IsAttacking { get; set; }
     [Networked] private TickTimer AttackCooldownTimer { get; set; }
     [Networked] private TickTimer AttackLockTimer { get; set; }
 
@@ -55,6 +55,8 @@ public class KillerController : NetworkBehaviour
     private static readonly int IsMovingHash = Animator.StringToHash("IsMoving");
     private static readonly int IsWalkingHash = Animator.StringToHash("IsWalking");
     private static readonly int IsCarryingHash = Animator.StringToHash("IsCarrying");
+    private static readonly int PickupHash = Animator.StringToHash("Pickup");
+    private const string BreathingIdleState = "Breathing Idle";
 
     private float localFreezeTimer = 0f;
     private bool isFrozen = true;
@@ -113,8 +115,41 @@ public class KillerController : NetworkBehaviour
             }
         }
 
-        ApplyAnimator();
+        if (HasInputAuthority && !HasStateAuthority)
+        {
+            // 클라이언트 본인: 입력 기반 즉시 애니메이션 (지연 없이)
+            ApplyAnimatorLocal();
+        }
+        else
+        {
+            // 서버 및 프록시: 네트워크 변수 기반 애니메이션
+            ApplyAnimator();
+        }
+
         ApplyLight();
+    }
+
+    // 클라이언트 본인용 - 로컬 입력 기반 즉시 애니메이션
+    private void ApplyAnimatorLocal()
+    {
+        if (anim == null) return;
+        if (Object == null || !Object.IsValid) return;
+
+        float h = Input.GetAxisRaw("Horizontal");
+        float v = Input.GetAxisRaw("Vertical");
+        bool isMoving = new Vector2(h, v).sqrMagnitude > 0.001f;
+
+        anim.SetBool(IsMovingHash, isMoving);
+        anim.SetBool(IsWalkingHash, false);
+        anim.SetBool(IsCarryingHash, NetIsCarrying);
+
+        // 공격 트리거는 로컬에서 즉시 재생 (NetDoAttack 동기화 기다리지 않음)
+        if (Input.GetMouseButtonDown(0) && AttackCooldownTimer.ExpiredOrNotRunning(Runner))
+        {
+            string trigger = NetAttackTrigger.ToString();
+            if (!string.IsNullOrEmpty(trigger))
+                anim.SetTrigger(trigger);
+        }
     }
 
     private void ApplyAnimator()
@@ -233,18 +268,10 @@ public class KillerController : NetworkBehaviour
     {
         if (cc == null || !cc.enabled) return;
 
-        if (IsAttacking)
-        {
-            NetIsMoving = false;
-            NetIsWalking = false;
-            ApplyGravityOnly();
-            return;
-        }
-
         Vector3 inputDir = new Vector3(input.move.x, 0f, input.move.y).normalized;
         bool isMoving = inputDir.sqrMagnitude > 0.001f;
 
-        float speed = runSpeed;
+        float speed = IsAttacking ? walkSpeed : runSpeed; // 공격 중에는 걷는 속도로 감속
         Vector3 moveDir = (transform.forward * inputDir.z + transform.right * inputDir.x).normalized;
 
         if (cc.isGrounded && YVelocity < 0f) YVelocity = groundedStick;
@@ -263,6 +290,14 @@ public class KillerController : NetworkBehaviour
         cc.Move(Vector3.up * YVelocity * Runner.DeltaTime);
     }
 
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    public void RPC_ResumeAfterMigration()
+    {
+        isFrozen = false;
+        if (cc != null) cc.enabled = HasInputAuthority || HasStateAuthority;
+        Debug.Log($"[KillerController] Migration 후 재개 | {gameObject.name}");
+    }
+
     [Rpc(RpcSources.All, RpcTargets.All)]
     public void RPC_PlayEmotion(string trigger)
     {
@@ -274,8 +309,11 @@ public class KillerController : NetworkBehaviour
     public void RPC_ReturnToIdle()
     {
         if (anim == null) return;
-        anim.ResetTrigger("OpenDoor");
-        anim.Play("Breathing Idle");
+        // OpenDoor 트리거가 실제로 사용되지 않으므로 제거, Attack 트리거 리셋
+        string trigger = NetAttackTrigger.ToString();
+        if (!string.IsNullOrEmpty(trigger))
+            anim.ResetTrigger(trigger);
+        anim.Play(BreathingIdleState);
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -288,6 +326,7 @@ public class KillerController : NetworkBehaviour
             follower = weaponObj.gameObject.AddComponent<WeaponFollower>();
 
         follower.target = FindBoneRecursive(transform, "hand.R");
+        follower.ownerKiller = this; // 소유자 킬러 연결 - 데미지 판정에서 사용
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -300,8 +339,7 @@ public class KillerController : NetworkBehaviour
         if (!actor.IsDead) return;
 
         NetIsCarrying = true;
-        actor.IsCarried = true;
-        actor.NetIsCarried = true;
+        actor.NetIsCarried = true;  // IsCarried 통합 - NetIsCarried 하나만 세팅
         carriedActorRef = actor;
 
         var actorCc = actor.GetComponent<CharacterController>();
@@ -316,7 +354,7 @@ public class KillerController : NetworkBehaviour
     private void RPC_PlayPickup()
     {
         if (anim != null)
-            anim.SetTrigger("Pickup");
+            anim.SetTrigger(PickupHash);
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -327,23 +365,21 @@ public class KillerController : NetworkBehaviour
         if (actor == null) return;
 
         NetIsCarrying = false;
-        actor.IsCarried = false;
-        actor.NetIsCarried = false;
+        actor.NetIsCarried = false;  // IsCarried 통합 - NetIsCarried 하나만 세팅
         carriedActorRef = null;
 
         var actorCc = actor.GetComponent<CharacterController>();
         if (actorCc != null) actorCc.enabled = true;
 
         RPC_SyncCarry(actorId, false);
-        RPC_PlayPutDown();
-        actor.RPC_PlayBeingPutDown();
+        // 내려놓기 애니메이션 없이 바로 Death_Idle로 복귀
+        actor.RPC_ReturnToDeathIdle();
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_PlayPutDown()
     {
-        if (anim != null)
-            anim.SetTrigger("PutDown");
+        // 사용하지 않음 - 내려놓기 애니메이션 제거
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -352,7 +388,7 @@ public class KillerController : NetworkBehaviour
         NetIsCarrying = carrying;
         if (!Runner.TryFindObject(actorId, out var actorObj)) return;
         var actor = actorObj.GetComponent<ActorController>();
-        if (actor != null) actor.NetIsCarried = carrying;
+        if (actor != null) actor.NetIsCarried = carrying;  // NetIsCarried로 통합
     }
 
     private Transform FindBoneRecursive(Transform parent, string boneName)

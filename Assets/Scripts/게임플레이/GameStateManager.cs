@@ -160,7 +160,72 @@ public class GameStateManager : NetworkBehaviour
         {
             IsDoorActivated = true;
             Debug.Log("[GameStateManager] 문 활성화!");
+
+            // 씬의 남은 모든 카메라 라이트 강제 종료 + 이후 상호작용 차단
+            var allCameras = FindObjectsByType<SecurityCamera>(FindObjectsSortMode.None);
+            foreach (var cam in allCameras)
+            {
+                if (!cam.IsCameraOff)
+                {
+                    cam.TurnOff();
+                    Debug.Log($"[GameStateManager] 남은 카메라 강제 종료: {cam.gameObject.name}");
+                }
+            }
         }
+    }
+
+    /// <summary>
+    /// 플레이어가 퇴장했을 때 FusionLobbyManager에서 호출
+    /// localActor가 퇴장한 플레이어의 것이라면 재탐색
+    /// </summary>
+    public void OnPlayerLeft(PlayerRef player)
+    {
+        // localActor가 퇴장한 플레이어 소유인지 확인
+        if (localActor != null && localActor.Object != null &&
+            localActor.Object.InputAuthority == player)
+        {
+            Debug.Log($"[GameStateManager] localActor의 플레이어 퇴장 - 재탐색 | Player={player}");
+            localActor = null;
+        }
+
+        // F키 진행 중이었다면 초기화
+        if (isOpeningDoor)
+        {
+            isOpeningDoor = false;
+            doorProgress = 0f;
+            HideFKeyHint();
+        }
+
+        Debug.Log($"[GameStateManager] 플레이어 퇴장 처리 완료 | Player={player}");
+    }
+
+    /// <summary>
+    /// Host Migration 후 씬 오브젝트 재연결
+    /// </summary>
+    public void RebuildAfterMigration()
+    {
+        Debug.Log("[GameStateManager] Migration 후 재연결 시작");
+
+        // localActor 재탐색
+        localActor = null;
+        FindLocalActor();
+
+        // Spawned()가 아직 안 불렸으면 [Networked] 변수 접근 불가 - 스킵
+        if (Object == null || !Object.IsValid)
+        {
+            Debug.LogWarning("[GameStateManager] Migration 재연결 스킵 - Object 아직 준비 안 됨");
+            return;
+        }
+
+        // 문 상태 재반영 (Render()가 처리하지만 명시적으로 호출)
+        if (exitDoor != null)
+            exitDoor.SetActive(IsDoorActivated);
+
+        // 진행 중이던 문 열기 상태 초기화 (Migration 중 끊겼을 수 있음)
+        isOpeningDoor = false;
+        doorProgress = 0f;
+
+        Debug.Log($"[GameStateManager] Migration 재연결 완료 | IsDoorActivated={IsDoorActivated} | localActor={localActor?.name ?? "null"}");
     }
 
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]

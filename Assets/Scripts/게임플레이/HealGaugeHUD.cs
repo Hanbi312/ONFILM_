@@ -2,21 +2,18 @@ using Fusion;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>
-/// HealGaugeHUD - 자가치료 게이지 UI
-/// H키를 누르는 동안 게이지가 차고, 떼면 멈춤
-/// </summary>
 public class HealGaugeHUD : MonoBehaviour
 {
     [Header("UI")]
-    [SerializeField] private GameObject healGaugePanel; // 게이지 패널 (H 누를 때만 표시)
-    [SerializeField] private Slider healSlider;          // 치료 게이지 슬라이더
-    [SerializeField] private float maxHealTime = 5f;     // ActorController와 동일하게 설정
+    [SerializeField] private GameObject healGaugePanel;
+    [SerializeField] private Slider healSlider;
+    [SerializeField] private float maxHealTime = 30f;
 
     private ActorController localActor;
 
     private void Update()
     {
+        // 로컬 연기자 찾기
         if (localActor == null)
         {
             var actors = FindObjectsByType<ActorController>(FindObjectsSortMode.None);
@@ -28,17 +25,23 @@ public class HealGaugeHUD : MonoBehaviour
                     break;
                 }
             }
-            return;
+
+            // 로컬 플레이어가 연기자가 아니면 패널 숨김
+            if (localActor == null)
+            {
+                if (healGaugePanel != null) healGaugePanel.SetActive(false);
+                return;
+            }
         }
 
-        bool isRecovering = localActor.IsDead && !localActor.SelfHeal && Input.GetKey(KeyCode.H);
+        // H 누르는 동안(자가치료) 또는 타인에게 치료받는 중에 패널 표시
+        bool selfHealing = Input.GetKey(KeyCode.H) && localActor.IsInjury && !localActor.IsDead && !localActor.IsBeingHealed;
+        bool beingHealed = localActor.IsBeingHealed && localActor.IsInjury && !localActor.IsDead;
+        bool show = selfHealing || beingHealed;
 
-        // 패널 표시/숨김 - 부상 상태에서 게이지가 차있을 때만 표시
-        if (healGaugePanel != null)
-            healGaugePanel.SetActive(localActor.IsInjury && !localActor.IsDead && !localActor.SelfHeal && localActor.SelfHealTime > 0f);
-
-        // 게이지 업데이트
-        if (healSlider != null)
-            healSlider.value = localActor.SelfHealTime / maxHealTime;
+        if (healGaugePanel != null) healGaugePanel.SetActive(show);
+        // maxHealTime을 ActorController에서 직접 읽어서 게이지 비율 정확하게 표시
+        float maxTime = localActor.selfHealTime;
+        if (healSlider != null) healSlider.value = maxTime > 0f ? localActor.SelfHealTime / maxTime : 0f;
     }
 }

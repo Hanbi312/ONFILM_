@@ -281,7 +281,9 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
                 GameMode = GameMode.AutoHostOrClient,
                 SessionName = targetRoomName,
                 SceneManager = runner.GetComponent<NetworkSceneManagerDefault>(),
-                ConnectionToken = System.Text.Encoding.UTF8.GetBytes($"{(int)selectedRole}|{PlayerSession.Instance?.Nickname ?? "Guest"}")
+                ConnectionToken = System.Text.Encoding.UTF8.GetBytes($"{(int)selectedRole}|{PlayerSession.Instance?.Nickname ?? "Guest"}"),
+                // 클라이언트도 HostMigrationResume 반드시 등록해야 Migration 동작
+                HostMigrationResume = HostMigrationResume,
             };
         }
         else
@@ -302,7 +304,10 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
                 SessionName = newRoomName,
                 PlayerCount = GetMaxPlayerCount(),
                 SessionProperties = properties,
-                SceneManager = runner.GetComponent<NetworkSceneManagerDefault>()
+                SceneManager = runner.GetComponent<NetworkSceneManagerDefault>(),
+                // Host Migration 활성화: 호스트가 나가도 다른 클라이언트가 새 호스트로 승격
+                HostMigrationToken = null,
+                HostMigrationResume = HostMigrationResume,
             };
         }
 
@@ -458,12 +463,38 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
 
         if (runner.IsServer)
         {
-            if (spawnedPlayers.TryGetValue(player, out NetworkPlayer networkPlayer))
-            {
-                if (networkPlayer != null && networkPlayer.Object != null)
-                    runner.Despawn(networkPlayer.Object);
+            // 게임플레이 씬 중 퇴장 시 → 캐릭터는 유지 (despawn 안 함)
+            // 씬 인덱스로 게임플레이 씬인지 확인
+            bool isInGameplayScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex == gameplaySceneBuildIndex;
 
-                spawnedPlayers.Remove(player);
+            if (isInGameplayScene)
+            {
+                // 퇴장 플레이어의 캐릭터 오브젝트는 그대로 두되 InputAuthority를 서버로 이전
+                // → 이렇게 하면 캐릭터가 씬에 남아 다른 플레이어들에게 보임
+                if (spawnedPlayers.TryGetValue(player, out NetworkPlayer networkPlayer))
+                {
+                    if (networkPlayer != null && networkPlayer.Object != null)
+                    {
+                        // NetworkPlayer 오브젝트만 despawn (캐릭터 오브젝트는 GameplayManager가 관리)
+                        runner.Despawn(networkPlayer.Object);
+                    }
+                    spawnedPlayers.Remove(player);
+                }
+
+                // 퇴장 플레이어의 게임 캐릭터(ActorController/KillerController)는 despawn하지 않음
+                // → 씬에 남겨두어 나머지 플레이어가 계속 플레이 가능
+                Debug.Log($"[FusionLobbyManager] 게임 씬 중 퇴장 - 캐릭터 유지 | Player={player}");
+            }
+            else
+            {
+                // 로비/캐릭터선택 씬에서 퇴장 시 → 기존처럼 NetworkPlayer despawn
+                if (spawnedPlayers.TryGetValue(player, out NetworkPlayer networkPlayer))
+                {
+                    if (networkPlayer != null && networkPlayer.Object != null)
+                        runner.Despawn(networkPlayer.Object);
+
+                    spawnedPlayers.Remove(player);
+                }
             }
 
             pendingRoles.Remove(player);
@@ -474,11 +505,18 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
 
         registeredPlayers.Remove(player);
         UpdatePlayerCountUI();
+
+        // GameStateManager에 플레이어 퇴장 알림 (localActor 재탐색)
+        GameStateManager.Instance?.OnPlayerLeft(player);
+
+        // GameplayManager에 플레이어 퇴장 알림 (캐릭터 처리)
+        var gameplayManager = FindFirstObjectByType<GameplayManager>();
+        gameplayManager?.OnPlayerLeft(player);
     }
 
     public async void OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken)
     {
-        Debug.Log("[FusionLobbyManager] Host Migration 시작");
+        Debug.Log("[FusionLobbyManager] ★ Host Migration 시작 - 새 호스트로 승격");
 
         await runner.Shutdown(shutdownReason: ShutdownReason.HostMigration);
 
@@ -495,20 +533,29 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
 
         var startGameArgs = new StartGameArgs
         {
+            // 새 호스트는 반드시 GameMode.Host로 재접속
             GameMode = GameMode.Host,
             HostMigrationToken = hostMigrationToken,
             HostMigrationResume = HostMigrationResume,
             SceneManager = newRunner.GetComponent<NetworkSceneManagerDefault>()
         };
 
-        var result = await newRunner.StartGame(startGameArgs);
-        if (!result.Ok)
+        // 최대 3회 재시도
+        for (int attempt = 1; attempt <= 3; attempt++)
         {
-            Debug.LogError($"[FusionLobbyManager] Host Migration 실패: {result.ShutdownReason}");
-            return;
+            var result = await newRunner.StartGame(startGameArgs);
+            if (result.Ok)
+            {
+                Debug.Log($"[FusionLobbyManager] Host Migration 성공 (시도 {attempt}회)");
+                return;
+            }
+            Debug.LogWarning($"[FusionLobbyManager] Host Migration 실패 (시도 {attempt}/3): {result.ShutdownReason}");
+            if (attempt < 3)
+                await System.Threading.Tasks.Task.Delay(500);
         }
 
-        Debug.Log("[FusionLobbyManager] Host Migration 성공");
+        Debug.LogError("[FusionLobbyManager] Host Migration 3회 모두 실패 - 연결 종료");
+        OnStatusChanged?.Invoke("호스트 이전 실패. 재접속이 필요합니다.");
     }
 
     private void HostMigrationResume(NetworkRunner runner)
@@ -533,23 +580,59 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
 
             // 캐릭터 오브젝트 복원
             var actorCtrl = obj.GetComponent<ActorController>();
-            var killerCtrl = obj.GetComponent<KillerController>();
-            if (actorCtrl != null || killerCtrl != null)
+            if (actorCtrl != null)
             {
                 obj.gameObject.SetActive(true);
-                Debug.Log($"[FusionLobbyManager] 캐릭터 복원 → {obj.name}");
+                actorCtrl.RPC_ResumeAfterMigration();
+                Debug.Log($"[FusionLobbyManager] 연기자 복원 → {obj.name}");
+                continue;
             }
 
-            // 모든 NetworkObject StateAuthority 요청
-            if (runner.IsServer && !obj.HasStateAuthority)
+            var killerCtrl = obj.GetComponent<KillerController>();
+            if (killerCtrl != null)
             {
-                runner.SetPlayerObject(obj.InputAuthority, obj);
+                obj.gameObject.SetActive(true);
+                killerCtrl.RPC_ResumeAfterMigration();
+                Debug.Log($"[FusionLobbyManager] 악역 복원 → {obj.name}");
+                continue;
             }
+
+            // StateAuthority 이전
+            if (runner.IsServer && !obj.HasStateAuthority)
+                runner.SetPlayerObject(obj.InputAuthority, obj);
         }
 
         RecalculateRoleCounts();
         UpdatePlayerCountUI();
+
+        // Migration 후 씬 오브젝트(GameStateManager 등) 재연결
+        StartCoroutine(RebuildAfterMigrationRoutine());
+
         Debug.Log("[FusionLobbyManager] HostMigrationResume 완료");
+    }
+
+    private IEnumerator RebuildAfterMigrationRoutine()
+    {
+        // GameStateManager의 Spawned()가 완료될 때까지 대기 (최대 5초)
+        float timeout = 5f;
+        float elapsed = 0f;
+        while (elapsed < timeout)
+        {
+            yield return null;
+            elapsed += Time.deltaTime;
+
+            var gsm = GameStateManager.Instance;
+            if (gsm != null && gsm.Object != null && gsm.Object.IsValid)
+                break;
+        }
+
+        // GameStateManager - localActor 재탐색
+        GameStateManager.Instance?.RebuildAfterMigration();
+
+        // 플레이어 딕셔너리 재구성
+        RebuildRegisteredPlayers();
+
+        Debug.Log("[FusionLobbyManager] Migration 후 씬 오브젝트 재연결 완료");
     }
 
     private bool IsMatchReadyToStart() => currentVillainCount >= maxVillainCount && currentActorCount >= maxActorCount;
@@ -787,10 +870,12 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
 
         if (shutdownReason == ShutdownReason.HostMigration)
         {
-            Debug.Log("[FusionLobbyManager] Host Migration용 종료");
+            Debug.Log("[FusionLobbyManager] Host Migration용 종료 - 게임 계속 유지");
             return;
         }
 
+        // DisconnectedByPluginLogic: 플레이어가 의도적으로 종료한 경우
+        // 나머지 플레이어가 있으면 Migration으로 이어지므로 여기는 마지막 플레이어 퇴장 시만 도달
         OnStatusChanged?.Invoke("네트워크 연결이 종료되었습니다.");
     }
 
