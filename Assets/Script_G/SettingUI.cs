@@ -29,29 +29,44 @@ public class SettingUI : MonoBehaviour
 
             settingUI.SetActive(isOpen);
 
-            if (isOpen)
+            if (!isOpen)
             {
-                settingUI.SetActive(true);
-                isUIOpen = true;
-                isAnyUIOpen = true;
-
-                MouseLock.Instance.PushState(GameState.UI);
-                settingUI.SetActive(true);
+                Open();
             }
             else
             {
-                settingUI.SetActive(false);
-                isUIOpen = false;
-                isAnyUIOpen = false;
-
-                settingUI.SetActive(false);
-                MouseLock.Instance.PopState();
+                Close();
             }
+        }
+
+        if (MouseLock.Instance == null)
+        {
+            Debug.LogError("MouseLock ¾øÀ½!");
         }
 
         for (int i=0; i < txt.Length; i++)
         {
             txt[i].text = KeySetting.keys[(KeyAction)i].ToString();
         }
+    }
+
+    public void Open()
+    {
+        settingUI.SetActive(true);
+        isUIOpen = true;
+        isAnyUIOpen = true;
+
+        MouseLock.Instance.PushState(GameState.UI);
+        settingUI.SetActive(true);
+    }
+
+    public void Close()
+    {
+        settingUI.SetActive(false);
+        isUIOpen = false;
+        isAnyUIOpen = false;
+
+        settingUI.SetActive(false);
+        MouseLock.Instance.PopState();
     }
 }

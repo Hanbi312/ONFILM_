@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class MouseLock : MonoBehaviour
 {
@@ -6,11 +7,41 @@ public class MouseLock : MonoBehaviour
 
     public GameState currentState;
     private GameState previousState;
+    public GameState startState = GameState.Gameplay;
+
+    void OnEnable()
+    {
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    void OnDisable()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
+    void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        Debug.Log($"¾À ·ÎµåµÊ: {scene.name}");
+
+        switch (scene.name)
+        {
+            case "AuthScene":
+                SetState(GameState.UI);
+                break;
+
+            case "GameplayScene":
+                SetState(GameState.Gameplay);
+                break;
+           default:
+                SetState(GameState.UI);
+                break;
+        }
+    }
 
     void Start()
     {
         Debug.Log("CursorManager ½ÇÇàµÊ");
-        SetState(GameState.Gameplay);
+        SetState(startState);
     }
 
     void Awake()
@@ -68,6 +99,10 @@ public class MouseLock : MonoBehaviour
         Debug.Log("Visible: " + Cursor.visible);
     }
 
+    void Update()
+    {
+        Debug.Log($"[MouseLock] ÇöÀç »óÅÂ: {currentState}");
+    }
 }
 
 public enum GameState
