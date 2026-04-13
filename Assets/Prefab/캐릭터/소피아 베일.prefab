@@ -493,7 +493,7 @@ MonoBehaviour:
   mouseSensitivity: 2
   pitchMin: -35
   pitchMax: 70
-  cameraSmoothing: 20
+  cameraSmoothing: 10
   defaultHealth: 2
   selfHealTime: 30
   otherHealTime: 15

@@ -660,7 +660,7 @@ RectTransform:
   m_GameObject: {fileID: 28932455}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.7252847, y: 1.1071289, z: 0.8409}
+  m_LocalScale: {x: 0.82555, y: 1.0587, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 2024724457}
@@ -12814,7 +12814,7 @@ MonoBehaviour:
   fKeyHint: {fileID: 1139645093}
   actionText: {fileID: 1271002669}
   exitDoor: {fileID: 510911795}
-  doorInteractRange: 2
+  doorInteractRange: 5
   doorInteractTime: 3
   doorAnimators:
   - {fileID: 510911799}
@@ -12825,7 +12825,7 @@ MonoBehaviour:
     _value: 0
   _HasFilm:
     _value: 0
-  _CameraOffCount: 0
+  _CameraOffCount: 2
   _IsDoorActivated:
     _value: 0
   _IsGameClear:
@@ -14493,14 +14493,14 @@ RectTransform:
   m_GameObject: {fileID: 825774492}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 5.0671873, y: 1.0532932, z: 1}
+  m_LocalScale: {x: 6.237707, y: 1.0523978, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 2024724457}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -134.2, y: 3.6}
+  m_AnchoredPosition: {x: -134.2, y: 4.5}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &825774494
@@ -20892,12 +20892,12 @@ MonoBehaviour:
   gaugeSlots:
   - {fileID: 28932457}
   - {fileID: 825774494}
-  - {fileID: 0}
+  - {fileID: 1486601126}
   - {fileID: 1665165181}
   - {fileID: 1745557333}
   - {fileID: 1914155051}
-  - {fileID: 1914155051}
-  - {fileID: 1914155051}
+  - {fileID: 1760499139}
+  - {fileID: 1447471058}
   happySprites:
   - {fileID: 21300000, guid: edada36a6f43b7a4ebb2e1861b893cef, type: 3}
   - {fileID: 21300000, guid: 0cca5271b4aec084a8c9abfd3a7cc348, type: 3}
@@ -20908,8 +20908,8 @@ MonoBehaviour:
   - {fileID: 21300000, guid: 16f50d4dee4f09a47b8c35f02dadc473, type: 3}
   - {fileID: 21300000, guid: 16f50d4dee4f09a47b8c35f02dadc473, type: 3}
   - {fileID: 21300000, guid: 28c16530372e25846afa3cd6a46b54d0, type: 3}
-  maxHappyCount: 3
-  maxBadCount: 3
+  maxHappyCount: 4
+  maxBadCount: 4
 --- !u!1 &1226913854
 GameObject:
   m_ObjectHideFlags: 0
@@ -33441,7 +33441,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 140}
+  m_AnchoredPosition: {x: 0, y: -5}
   m_SizeDelta: {x: 600, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &2024724458
