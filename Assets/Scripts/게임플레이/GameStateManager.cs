@@ -148,6 +148,28 @@ public class GameStateManager : NetworkBehaviour
         if (!HasStateAuthority) return;
         TragedyPoint++;
         Debug.Log($"[GameStateManager] 비극 포인트 +1 | 총 {TragedyPoint}포인트");
+
+        // 비극 포인트가 카메라 수 이상이면 악역 승리 (베드엔딩)
+        if (TragedyPoint >= requiredCameraOffCount)
+        {
+            if (IsGameClear) return;
+            IsGameClear = true;
+            RPC_OnGameOver();
+        }
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_OnGameOver()
+    {
+        Debug.Log("[GameStateManager] 게임 오버 - 악역 승리!");
+        ResultData.IsActorWin = false;
+        StartCoroutine(GameOverRoutine());
+    }
+
+    private IEnumerator GameOverRoutine()
+    {
+        yield return new WaitForSeconds(2f);
+        UnityEngine.SceneManagement.SceneManager.LoadScene("ResultScene");
     }
 
     public void OnCameraOff()
@@ -210,13 +232,6 @@ public class GameStateManager : NetworkBehaviour
         localActor = null;
         FindLocalActor();
 
-        // Spawned()가 아직 안 불렸으면 [Networked] 변수 접근 불가 - 스킵
-        if (Object == null || !Object.IsValid)
-        {
-            Debug.LogWarning("[GameStateManager] Migration 재연결 스킵 - Object 아직 준비 안 됨");
-            return;
-        }
-
         // 문 상태 재반영 (Render()가 처리하지만 명시적으로 호출)
         if (exitDoor != null)
             exitDoor.SetActive(IsDoorActivated);
@@ -243,18 +258,12 @@ public class GameStateManager : NetworkBehaviour
 
         if (doorAnimators != null && doorAnimators.Length > 0)
         {
-            Debug.Log($"[GameStateManager] 문 Animator 수: {doorAnimators.Length}");
             foreach (var anim in doorAnimators)
             {
                 if (anim != null)
-                {
                     anim.SetTrigger("Open");
-                    Debug.Log($"[GameStateManager] Open 트리거 발동: {anim.gameObject.name}");
-                }
                 else
-                {
                     Debug.LogError("[GameStateManager] doorAnimators 배열에 null 있음!");
-                }
             }
         }
         else
@@ -262,12 +271,14 @@ public class GameStateManager : NetworkBehaviour
             Debug.LogError("[GameStateManager] doorAnimators 배열이 비어있음! Inspector에서 연결 필요");
         }
 
+        // 연기자 승리 (게임 클리어 = 해피엔딩)
+        ResultData.IsActorWin = true;
         StartCoroutine(GameClearRoutine());
     }
 
     private IEnumerator GameClearRoutine()
     {
-        yield return new WaitForSeconds(1f);
-        Debug.Log("[GameStateManager] 게임 종료");
+        yield return new WaitForSeconds(2f); // 문 열리는 연출 대기
+        UnityEngine.SceneManagement.SceneManager.LoadScene("ResultScene");
     }
 }

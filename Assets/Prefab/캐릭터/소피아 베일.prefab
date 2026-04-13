@@ -60,7 +60,7 @@ Transform:
   m_GameObject: {fileID: 896486175555630066}
   serializedVersion: 2
   m_LocalRotation: {x: 0.12889916, y: -0, z: -0, w: 0.99165773}
-  m_LocalPosition: {x: 0, y: 0.202, z: -1.589}
+  m_LocalPosition: {x: 0, y: 0.35, z: -1.661}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -295,6 +295,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: -8963189505157964684, guid: 36d74224f8cdeba41904d674a32fa67c, type: 3}
+      propertyPath: m_Materials.Array.data[0]
+      value: 
+      objectReference: {fileID: 2100000, guid: c8e3ddbb2814ec84ba95a13cd72e5346, type: 2}
     - target: {fileID: -8679921383154817045, guid: 36d74224f8cdeba41904d674a32fa67c, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -335,14 +339,50 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: -107040257438439219, guid: 36d74224f8cdeba41904d674a32fa67c, type: 3}
+      propertyPath: m_Materials.Array.data[0]
+      value: 
+      objectReference: {fileID: 2100000, guid: c8e3ddbb2814ec84ba95a13cd72e5346, type: 2}
     - target: {fileID: 919132149155446097, guid: 36d74224f8cdeba41904d674a32fa67c, type: 3}
       propertyPath: m_Name
       value: "\uC18C\uD53C\uC544 \uBCA0\uC77C"
       objectReference: {fileID: 0}
+    - target: {fileID: 3784787778452730132, guid: 36d74224f8cdeba41904d674a32fa67c, type: 3}
+      propertyPath: m_Mesh
+      value: 
+      objectReference: {fileID: 2959467708922500008, guid: 73898283accf84c40ada82422ba73109, type: 3}
+    - target: {fileID: 3784787778452730132, guid: 36d74224f8cdeba41904d674a32fa67c, type: 3}
+      propertyPath: m_Materials.Array.data[0]
+      value: 
+      objectReference: {fileID: 2100000, guid: c8e3ddbb2814ec84ba95a13cd72e5346, type: 2}
+    - target: {fileID: 4766888686710532795, guid: 36d74224f8cdeba41904d674a32fa67c, type: 3}
+      propertyPath: m_Materials.Array.data[0]
+      value: 
+      objectReference: {fileID: 2100000, guid: c8e3ddbb2814ec84ba95a13cd72e5346, type: 2}
     - target: {fileID: 5866666021909216657, guid: 36d74224f8cdeba41904d674a32fa67c, type: 3}
       propertyPath: m_Controller
       value: 
       objectReference: {fileID: 9100000, guid: e911626d138d2b349811c67c6d6fd711, type: 2}
+    - target: {fileID: 6084037655052580901, guid: 36d74224f8cdeba41904d674a32fa67c, type: 3}
+      propertyPath: m_Materials.Array.data[0]
+      value: 
+      objectReference: {fileID: 2100000, guid: c8e3ddbb2814ec84ba95a13cd72e5346, type: 2}
+    - target: {fileID: 8282708515969865348, guid: 36d74224f8cdeba41904d674a32fa67c, type: 3}
+      propertyPath: m_Materials.Array.data[0]
+      value: 
+      objectReference: {fileID: 2100000, guid: c8e3ddbb2814ec84ba95a13cd72e5346, type: 2}
+    - target: {fileID: 8385637904983234520, guid: 36d74224f8cdeba41904d674a32fa67c, type: 3}
+      propertyPath: m_Materials.Array.data[0]
+      value: 
+      objectReference: {fileID: 2100000, guid: e4ec10e2ffd3943408c263958133284c, type: 2}
+    - target: {fileID: 8801724405890032222, guid: 36d74224f8cdeba41904d674a32fa67c, type: 3}
+      propertyPath: m_Materials.Array.data[0]
+      value: 
+      objectReference: {fileID: 2100000, guid: c8e3ddbb2814ec84ba95a13cd72e5346, type: 2}
+    - target: {fileID: 9183588487717543239, guid: 36d74224f8cdeba41904d674a32fa67c, type: 3}
+      propertyPath: m_Materials.Array.data[0]
+      value: 
+      objectReference: {fileID: 2100000, guid: c8e3ddbb2814ec84ba95a13cd72e5346, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects:
@@ -423,6 +463,7 @@ MonoBehaviour:
   interactRange: 2
   minTriggerTime: 1
   maxTriggerTime: 3
+  healOtherRange: 2
 --- !u!114 &7286880334237716740
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -454,6 +495,8 @@ MonoBehaviour:
   pitchMax: 70
   cameraSmoothing: 20
   defaultHealth: 2
+  selfHealTime: 30
+  otherHealTime: 15
   actorLight: {fileID: 254432207806605173}
   _Health: 0
   _IsDead:
@@ -463,11 +506,13 @@ MonoBehaviour:
   _SelfHealTime: 0
   _IsInjury:
     _value: 0
-  _IsCarried:
-    _value: 0
   _NetIsCarried:
     _value: 0
   _IsLockedByVillain:
+    _value: 0
+  _IsBeingHealed:
+    _value: 0
+  _IsHealingOther:
     _value: 0
 --- !u!114 &8037176829365030310
 MonoBehaviour:
