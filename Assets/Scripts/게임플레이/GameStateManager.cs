@@ -1,6 +1,7 @@
 using System.Collections;
 using Fusion;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using TMPro;
 
 /// <summary>
@@ -22,6 +23,8 @@ public class GameStateManager : NetworkBehaviour
 
     [Header("게임 설정")]
     [SerializeField] private int requiredCameraOffCount = 4;
+    [SerializeField] private int requiredTragedyPoint = 4;
+    [SerializeField] private int resultSceneBuildIndex = 5;  // Build Settings에서 ResultScene 인덱스
 
     [Networked] public NetworkBool HasScript { get; set; }
     [Networked] public NetworkBool HasFilm { get; set; } // 팀 전체 공유
@@ -150,26 +153,12 @@ public class GameStateManager : NetworkBehaviour
         Debug.Log($"[GameStateManager] 비극 포인트 +1 | 총 {TragedyPoint}포인트");
 
         // 비극 포인트가 카메라 수 이상이면 악역 승리 (베드엔딩)
-        if (TragedyPoint >= requiredCameraOffCount)
+        if (TragedyPoint >= requiredTragedyPoint)
         {
             if (IsGameClear) return;
             IsGameClear = true;
             RPC_OnGameOver();
         }
-    }
-
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_OnGameOver()
-    {
-        Debug.Log("[GameStateManager] 게임 오버 - 악역 승리!");
-        ResultData.IsActorWin = false;
-        StartCoroutine(GameOverRoutine());
-    }
-
-    private IEnumerator GameOverRoutine()
-    {
-        yield return new WaitForSeconds(2f);
-        UnityEngine.SceneManagement.SceneManager.LoadScene("ResultScene");
     }
 
     public void OnCameraOff()
@@ -228,15 +217,18 @@ public class GameStateManager : NetworkBehaviour
     {
         Debug.Log("[GameStateManager] Migration 후 재연결 시작");
 
-        // localActor 재탐색
         localActor = null;
         FindLocalActor();
 
-        // 문 상태 재반영 (Render()가 처리하지만 명시적으로 호출)
+        if (Object == null || !Object.IsValid)
+        {
+            Debug.LogWarning("[GameStateManager] Migration 재연결 스킵 - Object 아직 준비 안 됨");
+            return;
+        }
+
         if (exitDoor != null)
             exitDoor.SetActive(IsDoorActivated);
 
-        // 진행 중이던 문 열기 상태 초기화 (Migration 중 끊겼을 수 있음)
         isOpeningDoor = false;
         doorProgress = 0f;
 
@@ -271,14 +263,30 @@ public class GameStateManager : NetworkBehaviour
             Debug.LogError("[GameStateManager] doorAnimators 배열이 비어있음! Inspector에서 연결 필요");
         }
 
-        // 연기자 승리 (게임 클리어 = 해피엔딩)
         ResultData.IsActorWin = true;
         StartCoroutine(GameClearRoutine());
     }
 
     private IEnumerator GameClearRoutine()
     {
-        yield return new WaitForSeconds(2f); // 문 열리는 연출 대기
-        UnityEngine.SceneManagement.SceneManager.LoadScene("ResultScene");
+        yield return new WaitForSeconds(2f);
+        // Fusion Runner로 씬 전환 (서버만 LoadScene 호출, 클라이언트는 자동 따라옴)
+        if (Runner != null && Runner.IsServer)
+            Runner.LoadScene(SceneRef.FromIndex(resultSceneBuildIndex), LoadSceneMode.Single);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_OnGameOver()
+    {
+        Debug.Log("[GameStateManager] 게임 오버 - 악역 승리!");
+        ResultData.IsActorWin = false;
+        StartCoroutine(GameOverRoutine());
+    }
+
+    private IEnumerator GameOverRoutine()
+    {
+        yield return new WaitForSeconds(2f);
+        if (Runner != null && Runner.IsServer)
+            Runner.LoadScene(SceneRef.FromIndex(resultSceneBuildIndex), LoadSceneMode.Single);
     }
 }

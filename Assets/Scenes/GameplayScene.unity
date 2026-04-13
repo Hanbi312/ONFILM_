@@ -12821,6 +12821,8 @@ MonoBehaviour:
   - {fileID: 510911800}
   - {fileID: 670294249}
   requiredCameraOffCount: 2
+  requiredTragedyPoint: 4
+  resultSceneBuildIndex: 5
   _HasScript:
     _value: 0
   _HasFilm:
