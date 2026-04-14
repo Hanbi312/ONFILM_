@@ -7,6 +7,7 @@ public class InventoryHUD : MonoBehaviour
     [SerializeField] private Image[] slots;
 
     [Header("스프라이트")]
+    // private 형 > public 형
     [SerializeField] private Sprite scriptSprite; // 각본 아이템 스프라이트
 
     private ActorInteraction actorInteraction;

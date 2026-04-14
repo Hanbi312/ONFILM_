@@ -58,7 +58,8 @@ public class EndingGaugeHUD : MonoBehaviour
                 gaugeSlots[i].sprite = filled ? sprite : null;
                 gaugeSlots[i].color  = filled ? Color.white : Color.clear;
             }
-            else
+            // 무조건 실행 제거(else > if(i < maxBadCount))
+            if(i < maxBadCount)
             {
                 // 오른쪽 4칸: 베드엔딩 (오른쪽부터 채워짐)
                 int badSlotIndex = totalSlots - 1 - i; // 오른쪽 끝부터 채우기 위한 인덱스

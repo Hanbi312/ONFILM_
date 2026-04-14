@@ -15,6 +15,8 @@ public class SettingUI : MonoBehaviour
 
     void Start()
     {
+        settingUI.SetActive(false);
+
         for(int i=0; i<txt.Length; i++)
         {
             txt[i].text = KeySetting.keys[(KeyAction)i].ToString();
@@ -41,7 +43,7 @@ public class SettingUI : MonoBehaviour
 
         if (MouseLock.Instance == null)
         {
-            Debug.LogError("MouseLock ¾øÀ½!");
+            Debug.LogError("MouseLock ï¿½ï¿½ï¿½ï¿½!");
         }
 
         for (int i=0; i < txt.Length; i++)

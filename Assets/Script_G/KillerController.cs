@@ -274,6 +274,19 @@ public class KillerController : NetworkBehaviour
         float speed = IsAttacking ? walkSpeed : runSpeed; // 공격 중에는 걷는 속도로 감속
         Vector3 moveDir = (transform.forward * inputDir.z + transform.right * inputDir.x).normalized;
 
+        BuildDebugOverlay.SetText(
+            $"<b>[MoveAndAnimate]</b>\n" +
+            $"input.move   : {input.move}\n" +
+            $"inputDir     : {inputDir}\n" +
+            $"moveDir      : {moveDir}\n" +
+            $"forward      : {transform.forward}\n" +
+            $"right        : {transform.right}\n" +
+            $"isGrounded   : {cc.isGrounded}\n" +
+            $"YVelocity    : {YVelocity:F3}\n" +
+            $"speed        : {speed:F3}\n" +
+            $"isMoving     : {isMoving}"
+        );
+
         if (cc.isGrounded && YVelocity < 0f) YVelocity = groundedStick;
         YVelocity += gravity * Runner.DeltaTime;
         cc.Move((moveDir * speed + Vector3.up * YVelocity) * Runner.DeltaTime);
