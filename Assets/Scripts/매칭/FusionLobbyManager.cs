@@ -42,7 +42,6 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
     private readonly Dictionary<PlayerRef, MatchRole> pendingRoles = new Dictionary<PlayerRef, MatchRole>();
     private readonly Dictionary<PlayerRef, string> pendingNicknames = new Dictionary<PlayerRef, string>();
     private readonly Dictionary<PlayerRef, NetworkPlayer> registeredPlayers = new Dictionary<PlayerRef, NetworkPlayer>();
-    private readonly Queue<(MatchRole role, string nickname)> pendingConnectionTokens = new Queue<(MatchRole, string)>();
 
     public event Action<string> OnStatusChanged;
     public event Action<int, int> OnPlayerCountChanged;
@@ -378,13 +377,40 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
             return;
         }
 
-        // 토큰 큐에서 역할/닉네임 꺼내기 (클라이언트가 입장 시 전달한 정보)
-        if (player != runner.LocalPlayer && pendingConnectionTokens.Count > 0)
+        // 클라이언트가 보낸 ConnectionToken을 PlayerRef에 직접 매핑해 파싱
+        // Queue 방식 대신 runner.GetPlayerConnectionToken(player)를 사용해
+        // 동시 접속 시 역할/닉네임이 뒤바뀌는 race condition을 원천 차단
+        if (player != runner.LocalPlayer)
         {
-            var (role, nickname) = pendingConnectionTokens.Dequeue();
-            pendingRoles[player] = role;
-            pendingNicknames[player] = nickname;
-            Debug.Log($"[FusionLobbyManager] 토큰에서 역할 설정 | Player={player} | Role={role} | Nickname={nickname}");
+            byte[] rawToken = runner.GetPlayerConnectionToken(player);
+            if (rawToken != null && rawToken.Length > 0)
+            {
+                try
+                {
+                    string tokenStr = System.Text.Encoding.UTF8.GetString(rawToken);
+                    string[] parts = tokenStr.Split('|');
+                    if (parts.Length >= 2)
+                    {
+                        MatchRole role = (MatchRole)int.Parse(parts[0]);
+                        string nickname = parts[1];
+                        pendingRoles[player] = role;
+                        pendingNicknames[player] = nickname;
+                        Debug.Log($"[FusionLobbyManager] 토큰 직접 파싱 | Player={player} | Role={role} | Nickname={nickname}");
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[FusionLobbyManager] 토큰 형식 오류 | Player={player} | Raw={tokenStr}");
+                    }
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogWarning($"[FusionLobbyManager] 토큰 파싱 실패 | Player={player} | {e.Message}");
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"[FusionLobbyManager] ConnectionToken 없음 | Player={player}");
+            }
         }
 
         MatchRole resolvedRole = ResolveRoleForPlayer(player, true);
@@ -564,6 +590,9 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
 
         spawnedPlayers.Clear();
         registeredPlayers.Clear();
+        // pendingRoles/pendingNicknames는 아래 NetworkPlayer 복원 시 재구성하므로 먼저 비운다
+        pendingRoles.Clear();
+        pendingNicknames.Clear();
 
         foreach (var obj in runner.GetResumeSnapshotNetworkObjects())
         {
@@ -574,7 +603,19 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
                 PlayerRef owner = obj.InputAuthority;
                 spawnedPlayers[owner] = player;
                 registeredPlayers[owner] = player;
-                Debug.Log($"[FusionLobbyManager] NetworkPlayer 복원 → Player={owner} | Nickname={player.Nickname} | Role={player.RoleValue}");
+
+                // ★ Fix: 새 호스트는 타 플레이어의 pendingRoles/pendingNicknames를 갖고 있지 않으므로
+                //        NetworkPlayer의 네트워크 변수(RoleValue, Nickname)에서 직접 재구성한다.
+                //        이렇게 해야 RespawnMissingPlayerObjects → ResolveRoleForPlayer가
+                //        MatchRole.None을 반환하지 않고 올바른 역할을 돌려줄 수 있다.
+                MatchRole restoredRole = (MatchRole)player.RoleValue;
+                if (restoredRole != MatchRole.None)
+                    pendingRoles[owner] = restoredRole;
+
+                if (!string.IsNullOrWhiteSpace(player.Nickname))
+                    pendingNicknames[owner] = player.Nickname;
+
+                Debug.Log($"[FusionLobbyManager] NetworkPlayer 복원 → Player={owner} | Nickname={player.Nickname} | Role={restoredRole}");
                 continue;
             }
 
@@ -602,10 +643,10 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
                 runner.SetPlayerObject(obj.InputAuthority, obj);
         }
 
-        RecalculateRoleCounts();
+        RecalculateRoleCounts();  // pendingRoles 재구성 직후 즉시 집계 (Snapshot 오브젝트 기준)
         UpdatePlayerCountUI();
 
-        // Migration 후 씬 오브젝트(GameStateManager 등) 재연결
+        // Migration 후 씬 오브젝트(GameStateManager 등) 재연결 + 최종 roleCount 재집계
         StartCoroutine(RebuildAfterMigrationRoutine());
 
         Debug.Log("[FusionLobbyManager] HostMigrationResume 완료");
@@ -631,6 +672,13 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
 
         // 플레이어 딕셔너리 재구성
         RebuildRegisteredPlayers();
+
+        // ★ Fix: HostMigrationResume 시점에는 일부 NetworkPlayer가 아직
+        //        CanReadNetworkState() == false일 수 있어 RecalculateRoleCounts가
+        //        0을 반환할 수 있다. NetworkObject가 안정화된 이 시점에 재집계한다.
+        RecalculateRoleCounts();
+        UpdatePlayerCountUI();
+        Debug.Log($"[FusionLobbyManager] Migration 후 역할 최종 재집계 | Villain={currentVillainCount}/{maxVillainCount}, Actor={currentActorCount}/{maxActorCount}");
 
         Debug.Log("[FusionLobbyManager] Migration 후 씬 오브젝트 재연결 완료");
     }
@@ -834,31 +882,12 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
     public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
     public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
     {
+        // 토큰 파싱은 OnPlayerJoined에서 runner.GetPlayerConnectionToken(player)로 처리
+        // PlayerRef가 확정된 시점에서 직접 매핑하므로 동시 접속 race condition 없음
+        // 이 콜백에서는 연결 수락만 담당
         if (token != null && token.Length > 0)
-        {
-            try
-            {
-                string tokenStr = System.Text.Encoding.UTF8.GetString(token);
-                string[] parts = tokenStr.Split('|');
-                if (parts.Length >= 2)
-                {
-                    int roleValue = int.Parse(parts[0]);
-                    string nickname = parts[1];
-                    MatchRole role = (MatchRole)roleValue;
+            Debug.Log("[FusionLobbyManager] 연결 요청 수락 - 토큰 파싱은 OnPlayerJoined에서 처리");
 
-                    // 연결 요청한 플레이어의 역할을 미리 저장
-                    // request.Accept()는 항상 호출해야 연결이 수락됨
-                    Debug.Log($"[FusionLobbyManager] 연결 요청 | Role={role} | Nickname={nickname}");
-
-                    // 토큰 데이터를 임시 저장 (PlayerRef는 아직 모름)
-                    pendingConnectionTokens.Enqueue((role, nickname));
-                }
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogWarning($"[FusionLobbyManager] 토큰 파싱 실패: {e.Message}");
-            }
-        }
         request.Accept();
     }
     public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }

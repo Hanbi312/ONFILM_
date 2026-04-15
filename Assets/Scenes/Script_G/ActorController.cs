@@ -1,5 +1,6 @@
 ﻿using Fusion;
 using UnityEngine;
+using System.Collections;
 
 [RequireComponent(typeof(CharacterController))]
 [RequireComponent(typeof(NetworkTransform))]
@@ -96,6 +97,11 @@ public class ActorController : NetworkBehaviour
     private bool isFrozen = true;
     private CharacterController cc;
     private Animator anim;
+
+    // 아이템 획득 애니메이션 재생 중 이동 잠금
+    // RPC_PlayEmotion("item") → WaitForItemAnimation 코루틴 → 해제
+    private bool isPickingUpItem = false;
+    private Coroutine pickupLockCoroutine;
 
     // 미니게임 중 카메라 좌우 시야용 로컬 Yaw (몸통 회전과 분리)
     private float localCameraYaw = 0f;
@@ -259,6 +265,17 @@ public class ActorController : NetworkBehaviour
     {
         if (anim == null) return;
 
+        // 아이템 획득 애니메이션 재생 중: 이동 관련 파라미터를 모두 false 로 유지
+        // 트리거로 재생 중인 item 애니메이션이 이동 블렌드에 덮이지 않도록 보호
+        if (isPickingUpItem)
+        {
+            anim.SetBool(IsMovingHash,      false);
+            anim.SetBool(IsWalkingHash,     false);
+            anim.SetBool(IsSittingHash,     false);
+            anim.SetBool(IsSittingIdleHash, false);
+            return;
+        }
+
         // KeySetting 기반으로 이동 키 읽기 (InputProvider와 동일한 키 사용)
         float h = 0f, v = 0f;
         if (KeySetting.keys.TryGetValue(KeyAction.LEFT,  out var kL) && Input.GetKey(kL)) h -= 1f;
@@ -377,6 +394,21 @@ public class ActorController : NetworkBehaviour
             NetIsMoving = false;
             NetIsWalking = false;
             NetIsSitting = false;
+            return;
+        }
+
+        // 아이템 획득 애니메이션 재생 중 이동 잠금
+        // 애니메이션이 끝나면 WaitForItemAnimation 코루틴이 자동으로 해제함
+        if (isPickingUpItem)
+        {
+            NetIsMoving      = false;
+            NetIsWalking     = false;
+            NetIsSitting     = false;
+            NetIsSittingIdle = false;
+            // 중력은 계속 적용 (공중에서 획득해도 자연스럽게 착지)
+            if (cc.isGrounded && YVelocity < 0f) YVelocity = groundedStick;
+            YVelocity += gravity * Runner.DeltaTime;
+            cc.Move(Vector3.up * YVelocity * Runner.DeltaTime);
             return;
         }
 
@@ -544,6 +576,72 @@ public class ActorController : NetworkBehaviour
     {
         if (anim != null && !string.IsNullOrEmpty(trigger))
             anim.SetTrigger(trigger);
+
+        // 아이템 획득 트리거일 때 애니메이션이 끝날 때까지 이동을 잠근다.
+        // RPC가 All→All 이므로 서버·클라이언트 모두 각자 코루틴을 돌려
+        // MoveAndAnimate(서버)와 ApplyAnimatorFromInput(클라이언트) 양쪽을 모두 잠근다.
+        if (trigger == "item")
+        {
+            if (pickupLockCoroutine != null)
+                StopCoroutine(pickupLockCoroutine);
+            pickupLockCoroutine = StartCoroutine(WaitForItemAnimation());
+        }
+    }
+
+    // 아이템 획득 애니메이션이 완전히 끝날 때까지 isPickingUpItem=true 를 유지하는 코루틴
+    // Animator 상태를 직접 감지하므로 애니메이션 클립 길이를 하드코딩할 필요 없음
+    private IEnumerator WaitForItemAnimation()
+    {
+        isPickingUpItem = true;
+        Debug.Log("[ActorController] 아이템 획득 - 이동 잠금 시작");
+
+        // 트리거가 Animator에 반영될 때까지 2프레임 대기
+        yield return null;
+        yield return null;
+
+        if (anim == null)
+        {
+            isPickingUpItem = false;
+            pickupLockCoroutine = null;
+            yield break;
+        }
+
+        // ① 상태 전환(transition) 시작 대기 - 트리거로 전환이 걸리지 않으면 최대 0.5초 후 통과
+        float elapsed = 0f;
+        while (!anim.IsInTransition(0) && elapsed < 0.5f)
+        {
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        // ② 전환 완료 대기 - item 상태로 완전히 진입
+        while (anim != null && anim.IsInTransition(0))
+            yield return null;
+
+        if (anim == null)
+        {
+            isPickingUpItem = false;
+            pickupLockCoroutine = null;
+            yield break;
+        }
+
+        // ③ item 애니메이션 재생 종료 대기
+        //    normalizedTime >= 0.95f 이고 전환 중이 아니면 애니메이션이 거의 끝난 것으로 판단
+        //    최대 3초 타임아웃 (비정상적으로 긴 애니메이션 대비)
+        elapsed = 0f;
+        while (elapsed < 3f)
+        {
+            if (anim == null) break;
+            var stateInfo = anim.GetCurrentAnimatorStateInfo(0);
+            if (!anim.IsInTransition(0) && stateInfo.normalizedTime >= 0.95f)
+                break;
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        isPickingUpItem = false;
+        pickupLockCoroutine = null;
+        Debug.Log("[ActorController] 아이템 획득 애니메이션 완료 - 이동 잠금 해제");
     }
 
     [Rpc(RpcSources.All, RpcTargets.All)]
@@ -623,6 +721,9 @@ public class ActorController : NetworkBehaviour
     {
         if (anim != null)
             anim.SetTrigger(DeathHash);
+
+        // 사망 시 아이템 획득 잠금 즉시 해제 (코루틴이 무한 대기하는 것 방지)
+        CancelPickupLock();
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -664,6 +765,9 @@ public class ActorController : NetworkBehaviour
         SelfHeal = false;
         SelfHealTime = 0f;
 
+        // 아이템 획득 잠금 해제 (리스폰 시 모든 상태 초기화)
+        CancelPickupLock();
+
         // 위치 이동
         if (cc != null) cc.enabled = false;
         transform.position = position;
@@ -676,6 +780,17 @@ public class ActorController : NetworkBehaviour
         RPC_RespawnAnimation();
 
         Debug.Log($"[ActorController] 리스폰 완료: {position} | 체력={Health}");
+    }
+
+    // 아이템 획득 잠금 강제 해제 (사망·리스폰 등 외부 인터럽트용)
+    private void CancelPickupLock()
+    {
+        if (pickupLockCoroutine != null)
+        {
+            StopCoroutine(pickupLockCoroutine);
+            pickupLockCoroutine = null;
+        }
+        isPickingUpItem = false;
     }
 
     // 악역 카메라 이동 잠금/해제 - 클라이언트에서 직접 [Networked] 변수 접근 대신 RPC 경유

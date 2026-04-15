@@ -2100,7 +2100,7 @@ CharacterController:
   m_StepOffset: 0.3
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001
-  m_Center: {x: 0, y: 0.6, z: 0}
+  m_Center: {x: 0, y: 0.74, z: 0}
 --- !u!114 &5057221855074315711
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2125,7 +2125,7 @@ MonoBehaviour:
   mouseSensitivity: 2
   pitchMin: -35
   pitchMax: 70
-  cameraSmoothing: 20
+  cameraSmoothing: 10
   attackCooldown: 0.6
   attackLockTime: 0.35
   killerLight: {fileID: 1497583253590292863}

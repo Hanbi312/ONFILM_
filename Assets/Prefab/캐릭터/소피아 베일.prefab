@@ -326,7 +326,7 @@ CharacterController:
   m_StepOffset: 0.3
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001
-  m_Center: {x: 0.03, y: 0.77, z: 0}
+  m_Center: {x: 0.03, y: 0.79, z: 0}
 --- !u!114 &5182358243763443036
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -372,7 +372,7 @@ MonoBehaviour:
   mouseSensitivity: 2
   pitchMin: -35
   pitchMax: 70
-  cameraSmoothing: 20
+  cameraSmoothing: 10
   defaultHealth: 2
   selfHealTime: 30
   otherHealTime: 15

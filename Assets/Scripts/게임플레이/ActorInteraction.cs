@@ -21,6 +21,10 @@ public class ActorInteraction : MonoBehaviour
     private bool isHealingOther = false;      // 타인 치료 중 여부
     private ActorController lastHealedActor = null; // nearInjuredActor가 null이 돼도 RPC 호출하기 위한 캐시
 
+    // HealGaugeHUD에서 치료 진행도 UI를 표시하기 위해 외부 노출
+    public bool IsHealingOther => isHealingOther;
+    public ActorController HealTarget  => lastHealedActor;
+
     private float actPoint = 0f;
     private bool isActing = false;
     private float timer = 0f;

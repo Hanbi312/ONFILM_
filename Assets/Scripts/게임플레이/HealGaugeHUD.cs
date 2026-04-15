@@ -9,7 +9,8 @@ public class HealGaugeHUD : MonoBehaviour
     [SerializeField] private Slider healSlider;
     [SerializeField] private float maxHealTime = 30f;
 
-    private ActorController localActor;
+    private ActorController   localActor;
+    private ActorInteraction  localInteraction; // 타인 치료 진행도 참조용
 
     private void Update()
     {
@@ -21,12 +22,12 @@ public class HealGaugeHUD : MonoBehaviour
             {
                 if (actor.HasInputAuthority)
                 {
-                    localActor = actor;
+                    localActor       = actor;
+                    localInteraction = actor.GetComponent<ActorInteraction>();
                     break;
                 }
             }
 
-            // 로컬 플레이어가 연기자가 아니면 패널 숨김
             if (localActor == null)
             {
                 if (healGaugePanel != null) healGaugePanel.SetActive(false);
@@ -34,14 +35,51 @@ public class HealGaugeHUD : MonoBehaviour
             }
         }
 
-        // H 누르는 동안(자가치료) 또는 타인에게 치료받는 중에 패널 표시
-        bool selfHealing = Input.GetKey(KeyCode.H) && localActor.IsInjury && !localActor.IsDead && !localActor.IsBeingHealed;
-        bool beingHealed = localActor.IsBeingHealed && localActor.IsInjury && !localActor.IsDead;
-        bool show = selfHealing || beingHealed;
+        // ── 표시 조건 ────────────────────────────────────────────────
+        // 1) 자가치료: H키를 누르는 동안, 부상 상태, 살아있음, 타인 치료받는 중 아님
+        bool selfHealing  = Input.GetKey(KeyCode.H)
+                            && localActor.IsInjury
+                            && !localActor.IsDead
+                            && !localActor.IsBeingHealed;
+
+        // 2) 타인에게 치료받는 중
+        bool beingHealed  = localActor.IsBeingHealed
+                            && localActor.IsInjury
+                            && !localActor.IsDead;
+
+        // 3) 타인을 치료해주는 중 (치료해주는 쪽도 게이지 표시)
+        bool healingOther = localInteraction != null
+                            && localInteraction.IsHealingOther
+                            && localInteraction.HealTarget != null;
+
+        bool show = selfHealing || beingHealed || healingOther;
 
         if (healGaugePanel != null) healGaugePanel.SetActive(show);
-        // maxHealTime을 ActorController에서 직접 읽어서 게이지 비율 정확하게 표시
-        float maxTime = localActor.selfHealTime;
-        if (healSlider != null) healSlider.value = maxTime > 0f ? localActor.SelfHealTime / maxTime : 0f;
+
+        if (!show)
+        {
+            if (healSlider != null) healSlider.value = 0f;
+            return;
+        }
+
+        // ── 슬라이더 값 결정 ─────────────────────────────────────────
+        float progress = 0f;
+
+        if (healingOther)
+        {
+            // 치료해주는 쪽: 대상(HealTarget)의 누적 게이지를 기준으로 표시
+            // 대상의 selfHealTime이 최댓값 기준 (RPC_HealByOther가 selfHealTime까지 누적)
+            ActorController target = localInteraction.HealTarget;
+            float maxTime = target.selfHealTime;
+            progress = maxTime > 0f ? target.SelfHealTime / maxTime : 0f;
+        }
+        else
+        {
+            // 자가치료 / 타인에게 치료받는 중: 로컬 액터의 누적 게이지 사용
+            float maxTime = localActor.selfHealTime;
+            progress = maxTime > 0f ? localActor.SelfHealTime / maxTime : 0f;
+        }
+
+        if (healSlider != null) healSlider.value = progress;
     }
 }
