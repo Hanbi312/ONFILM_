@@ -43,6 +43,12 @@ public class SecurityCamera : NetworkBehaviour
     {
         if (Object == null || !Object.IsValid) return;
 
+        // public 직렬화 필드는 씬/프리팹에 저장된 값이 남을 수 있으므로
+        // Spawned()에서 명시적으로 초기화해 이전 테스트 데이터가 시작 시 남는 문제를 방지
+        actPoint = 0f;
+        miniGameTime = 0f;
+        isMiniGameActive = false;
+
         if (spotLight == null)
             spotLight = GetComponentInChildren<Light>(true);
 
@@ -51,8 +57,10 @@ public class SecurityCamera : NetworkBehaviour
         else
             Debug.LogError($"[SecurityCamera] {gameObject.name} - Light 컴포넌트 없음!");
 
-        // ProgressBar에 이 카메라 등록 (actPoint 읽도록)
-        MiniGameManager.Instance?.RegisterCamera(this);
+        // RegisterCamera는 연기자가 실제로 카메라 작업을 시작할 때(ActorInteraction.HandleInput)
+        // 호출하므로 여기서 자동 등록하지 않는다.
+        // 자동 등록 시 마지막으로 Spawned된 카메라가 항상 ProgressBar에 물려
+        // 작업 중이지 않아도 ProgressBar가 해당 카메라를 계속 참조하는 문제가 생김
     }
 
     // FilmItem → 누구든 호출 가능, RPC로 모든 클라이언트에 동기화

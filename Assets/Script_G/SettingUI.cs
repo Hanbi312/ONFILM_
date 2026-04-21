@@ -31,13 +31,13 @@ public class SettingUI : MonoBehaviour
 
             settingUI.SetActive(isOpen);
 
-            if (!isOpen)
+            if (isOpen)
             {
-                Open();
+                Open();   // isOpen = true → 방금 열림 → 커서 해제
             }
             else
             {
-                Close();
+                Close();  // isOpen = false → 방금 닫힘 → 커서 잠금
             }
         }
 

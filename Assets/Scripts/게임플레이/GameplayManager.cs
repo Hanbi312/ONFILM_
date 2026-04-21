@@ -155,8 +155,9 @@ public class GameplayManager : MonoBehaviour
                 break;
             }
 
-            // 몇 명이 수신됐는지 로그
-            int received = players?.Count(p => p != null && p.HasSentSelection) ?? 0;
+            // CanReadNetworkState() 없이 HasSentSelection에 접근하면 Fusion 예외 발생
+            // → 반드시 CanReadNetworkState() 먼저 확인 후 접근
+            int received = players?.Count(p => p != null && p.CanReadNetworkState() && p.HasSentSelection) ?? 0;
             int total = players?.Count ?? 0;
             Debug.Log($"[GameplayManager] 선택 데이터 대기 중... {received}/{total}");
 
@@ -213,6 +214,13 @@ public class GameplayManager : MonoBehaviour
         else if (actorSpawnPoint != null)
             availableActorSpawnPoints.Add(actorSpawnPoint);
 
+        // ★ 수정: 연기자 스폰 포인트가 하나도 없으면 즉시 실패 처리
+        if (availableActorSpawnPoints.Count == 0)
+        {
+            Debug.LogError("[GameplayManager] 연기자 스폰 포인트가 하나도 없음! Inspector에서 actorSpawnPoints 또는 actorSpawnPoint를 연결하세요.");
+            return false;
+        }
+
         // 악역 스폰 포인트 준비
         List<Transform> availableVillainSpawnPoints = new List<Transform>();
         if (villainSpawnPoints != null && villainSpawnPoints.Length > 0)
@@ -228,6 +236,13 @@ public class GameplayManager : MonoBehaviour
         }
         else if (villainSpawnPoint != null)
             availableVillainSpawnPoints.Add(villainSpawnPoint);
+
+        // ★ 수정: 악역 스폰 포인트가 하나도 없으면 즉시 실패 처리
+        if (availableVillainSpawnPoints.Count == 0)
+        {
+            Debug.LogError("[GameplayManager] 악역 스폰 포인트가 하나도 없음! Inspector에서 villainSpawnPoints 또는 villainSpawnPoint를 연결하세요.");
+            return false;
+        }
 
         int activePlayerCount = runner.ActivePlayers.Count();
         List<NetworkPlayer> players = lobbyManager.GetAllNetworkPlayers();
@@ -261,17 +276,17 @@ public class GameplayManager : MonoBehaviour
 
             if (role == MatchRole.Actor)
             {
-                if (actorSpawnIndex < availableActorSpawnPoints.Count)
-                    spawnPoint = availableActorSpawnPoints[actorSpawnIndex++];
-                else
-                    spawnPoint = availableActorSpawnPoints[0];
+                // ★ 수정: 인덱스 범위 초과 시 마지막 포인트로 클램프 (크래시 방지)
+                int idx = Mathf.Clamp(actorSpawnIndex, 0, availableActorSpawnPoints.Count - 1);
+                spawnPoint = availableActorSpawnPoints[idx];
+                actorSpawnIndex++;
             }
             else
             {
-                if (villainSpawnIndex < availableVillainSpawnPoints.Count)
-                    spawnPoint = availableVillainSpawnPoints[villainSpawnIndex++];
-                else
-                    spawnPoint = availableVillainSpawnPoints[0];
+                // ★ 수정: 인덱스 범위 초과 시 마지막 포인트로 클램프 (크래시 방지)
+                int idx = Mathf.Clamp(villainSpawnIndex, 0, availableVillainSpawnPoints.Count - 1);
+                spawnPoint = availableVillainSpawnPoints[idx];
+                villainSpawnIndex++;
             }
 
             // 선택한 캐릭터 프리팹 결정

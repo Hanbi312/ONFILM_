@@ -42,9 +42,19 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
     private readonly Dictionary<PlayerRef, MatchRole> pendingRoles = new Dictionary<PlayerRef, MatchRole>();
     private readonly Dictionary<PlayerRef, string> pendingNicknames = new Dictionary<PlayerRef, string>();
     private readonly Dictionary<PlayerRef, NetworkPlayer> registeredPlayers = new Dictionary<PlayerRef, NetworkPlayer>();
+    private readonly Queue<(MatchRole role, string nickname)> pendingConnectionTokens = new Queue<(MatchRole, string)>();
 
     public event Action<string> OnStatusChanged;
     public event Action<int, int> OnPlayerCountChanged;
+
+    // ─── 포커스 복귀 시 입력 재설정 ─────────────────────────────────────
+    // Alt-Tab 등으로 창 포커스가 빠질 때 누르고 있던 키의 KeyUp 이벤트를
+    // Unity가 받지 못해, 포커스 복귀 후에도 "키가 계속 눌린" 상태가 유지됨.
+    // → 마지막으로 밟고 있던 키(예: S)가 고정돼서 뭘 눌러도 뒤로만 가는 현상.
+    // 포커스 복귀 직후 짧은 시간 동안 입력을 무시해서 Unity가 실제 키 상태를
+    // 다시 폴링하도록 유도함.
+    private float inputIgnoreUntil = 0f;
+    private const float FocusRegainBlockDuration = 0.15f;
 
     private void Awake()
     {
@@ -56,6 +66,23 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
         else
         {
             Destroy(gameObject);
+        }
+    }
+
+    private void OnApplicationFocus(bool hasFocus)
+    {
+        if (!hasFocus) return;
+
+        // 포커스 복귀 시 유니티 Input 축을 초기화하고 잠깐 입력을 무시
+        // → Alt-Tab 중에 고정된 키 상태(특히 S) 해제
+        Input.ResetInputAxes();
+        inputIgnoreUntil = Time.realtimeSinceStartup + FocusRegainBlockDuration;
+
+        // 게임플레이 중이면 커서도 다시 잠금 (Alt-Tab 시 Unity가 자동 해제함)
+        if (MouseLock.Instance != null && MouseLock.Instance.currentState == GameState.Gameplay)
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
         }
     }
 
@@ -121,7 +148,9 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
                 networkPlayer = cachedPlayer;
                 return true;
             }
-            registeredPlayers.Remove(playerRef);
+            // Object 참조가 죽은 경우만 캐시에서 제거 (IsValid=false는 일시적이므로 유지)
+            if (cachedPlayer == null || cachedPlayer.Object == null)
+                registeredPlayers.Remove(playerRef);
         }
 
         // 2) Spawned()에서 등록된 캐시
@@ -133,7 +162,8 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
                 networkPlayer = spawnedPlayer;
                 return true;
             }
-            spawnedPlayers.Remove(playerRef);
+            if (spawnedPlayer == null || spawnedPlayer.Object == null)
+                spawnedPlayers.Remove(playerRef);
         }
 
         // 3) Runner의 PlayerObject
@@ -377,40 +407,13 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
             return;
         }
 
-        // 클라이언트가 보낸 ConnectionToken을 PlayerRef에 직접 매핑해 파싱
-        // Queue 방식 대신 runner.GetPlayerConnectionToken(player)를 사용해
-        // 동시 접속 시 역할/닉네임이 뒤바뀌는 race condition을 원천 차단
-        if (player != runner.LocalPlayer)
+        // 토큰 큐에서 역할/닉네임 꺼내기 (클라이언트가 입장 시 전달한 정보)
+        if (player != runner.LocalPlayer && pendingConnectionTokens.Count > 0)
         {
-            byte[] rawToken = runner.GetPlayerConnectionToken(player);
-            if (rawToken != null && rawToken.Length > 0)
-            {
-                try
-                {
-                    string tokenStr = System.Text.Encoding.UTF8.GetString(rawToken);
-                    string[] parts = tokenStr.Split('|');
-                    if (parts.Length >= 2)
-                    {
-                        MatchRole role = (MatchRole)int.Parse(parts[0]);
-                        string nickname = parts[1];
-                        pendingRoles[player] = role;
-                        pendingNicknames[player] = nickname;
-                        Debug.Log($"[FusionLobbyManager] 토큰 직접 파싱 | Player={player} | Role={role} | Nickname={nickname}");
-                    }
-                    else
-                    {
-                        Debug.LogWarning($"[FusionLobbyManager] 토큰 형식 오류 | Player={player} | Raw={tokenStr}");
-                    }
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogWarning($"[FusionLobbyManager] 토큰 파싱 실패 | Player={player} | {e.Message}");
-                }
-            }
-            else
-            {
-                Debug.LogWarning($"[FusionLobbyManager] ConnectionToken 없음 | Player={player}");
-            }
+            var (role, nickname) = pendingConnectionTokens.Dequeue();
+            pendingRoles[player] = role;
+            pendingNicknames[player] = nickname;
+            Debug.Log($"[FusionLobbyManager] 토큰에서 역할 설정 | Player={player} | Role={role} | Nickname={nickname}");
         }
 
         MatchRole resolvedRole = ResolveRoleForPlayer(player, true);
@@ -590,9 +593,6 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
 
         spawnedPlayers.Clear();
         registeredPlayers.Clear();
-        // pendingRoles/pendingNicknames는 아래 NetworkPlayer 복원 시 재구성하므로 먼저 비운다
-        pendingRoles.Clear();
-        pendingNicknames.Clear();
 
         foreach (var obj in runner.GetResumeSnapshotNetworkObjects())
         {
@@ -603,19 +603,7 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
                 PlayerRef owner = obj.InputAuthority;
                 spawnedPlayers[owner] = player;
                 registeredPlayers[owner] = player;
-
-                // ★ Fix: 새 호스트는 타 플레이어의 pendingRoles/pendingNicknames를 갖고 있지 않으므로
-                //        NetworkPlayer의 네트워크 변수(RoleValue, Nickname)에서 직접 재구성한다.
-                //        이렇게 해야 RespawnMissingPlayerObjects → ResolveRoleForPlayer가
-                //        MatchRole.None을 반환하지 않고 올바른 역할을 돌려줄 수 있다.
-                MatchRole restoredRole = (MatchRole)player.RoleValue;
-                if (restoredRole != MatchRole.None)
-                    pendingRoles[owner] = restoredRole;
-
-                if (!string.IsNullOrWhiteSpace(player.Nickname))
-                    pendingNicknames[owner] = player.Nickname;
-
-                Debug.Log($"[FusionLobbyManager] NetworkPlayer 복원 → Player={owner} | Nickname={player.Nickname} | Role={restoredRole}");
+                Debug.Log($"[FusionLobbyManager] NetworkPlayer 복원 → Player={owner} | Nickname={player.Nickname} | Role={player.RoleValue}");
                 continue;
             }
 
@@ -643,10 +631,10 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
                 runner.SetPlayerObject(obj.InputAuthority, obj);
         }
 
-        RecalculateRoleCounts();  // pendingRoles 재구성 직후 즉시 집계 (Snapshot 오브젝트 기준)
+        RecalculateRoleCounts();
         UpdatePlayerCountUI();
 
-        // Migration 후 씬 오브젝트(GameStateManager 등) 재연결 + 최종 roleCount 재집계
+        // Migration 후 씬 오브젝트(GameStateManager 등) 재연결
         StartCoroutine(RebuildAfterMigrationRoutine());
 
         Debug.Log("[FusionLobbyManager] HostMigrationResume 완료");
@@ -672,13 +660,6 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
 
         // 플레이어 딕셔너리 재구성
         RebuildRegisteredPlayers();
-
-        // ★ Fix: HostMigrationResume 시점에는 일부 NetworkPlayer가 아직
-        //        CanReadNetworkState() == false일 수 있어 RecalculateRoleCounts가
-        //        0을 반환할 수 있다. NetworkObject가 안정화된 이 시점에 재집계한다.
-        RecalculateRoleCounts();
-        UpdatePlayerCountUI();
-        Debug.Log($"[FusionLobbyManager] Migration 후 역할 최종 재집계 | Villain={currentVillainCount}/{maxVillainCount}, Actor={currentActorCount}/{maxActorCount}");
 
         Debug.Log("[FusionLobbyManager] Migration 후 씬 오브젝트 재연결 완료");
     }
@@ -790,7 +771,8 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
             }
             else
             {
-                Debug.LogWarning($"[FusionLobbyManager] NetworkPlayer 복구 실패 | PlayerRef={playerRef}");
+                // 씬 전환 직후 Fusion tick 안정화 전에는 정상적으로 실패할 수 있음 → Log (Warning 아님)
+                Debug.Log($"[FusionLobbyManager] NetworkPlayer 아직 준비 안 됨 (재시도 중) | PlayerRef={playerRef}");
             }
         }
     }
@@ -882,12 +864,31 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
     public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
     public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
     {
-        // 토큰 파싱은 OnPlayerJoined에서 runner.GetPlayerConnectionToken(player)로 처리
-        // PlayerRef가 확정된 시점에서 직접 매핑하므로 동시 접속 race condition 없음
-        // 이 콜백에서는 연결 수락만 담당
         if (token != null && token.Length > 0)
-            Debug.Log("[FusionLobbyManager] 연결 요청 수락 - 토큰 파싱은 OnPlayerJoined에서 처리");
+        {
+            try
+            {
+                string tokenStr = System.Text.Encoding.UTF8.GetString(token);
+                string[] parts = tokenStr.Split('|');
+                if (parts.Length >= 2)
+                {
+                    int roleValue = int.Parse(parts[0]);
+                    string nickname = parts[1];
+                    MatchRole role = (MatchRole)roleValue;
 
+                    // 연결 요청한 플레이어의 역할을 미리 저장
+                    // request.Accept()는 항상 호출해야 연결이 수락됨
+                    Debug.Log($"[FusionLobbyManager] 연결 요청 | Role={role} | Nickname={nickname}");
+
+                    // 토큰 데이터를 임시 저장 (PlayerRef는 아직 모름)
+                    pendingConnectionTokens.Enqueue((role, nickname));
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[FusionLobbyManager] 토큰 파싱 실패: {e.Message}");
+            }
+        }
         request.Accept();
     }
     public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }
@@ -908,21 +909,99 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
         OnStatusChanged?.Invoke("네트워크 연결이 종료되었습니다.");
     }
 
+    // 디버그 로그 쓰로틀링
+    private float lastInputLogTime = 0f;
+
+    // 커서 잠금 상태 추적 (전환 감지용)
+    private bool wasCursorLocked = true;
+
+    // 킬러 절대 Yaw 추적 (delta 누적 오차 방지)
+    private float killerYaw = 0f;
+    private bool killerYawReady = false;
+    private KillerController lastKiller = null;
+
     public void OnInput(NetworkRunner runner, NetworkInput input)
     {
         PlayerNetworkInput data = new PlayerNetworkInput();
 
-        data.move = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
-        data.look = new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y"));
+        bool isCursorLocked = Cursor.lockState == CursorLockMode.Locked;
+
+        // 커서 잠금 해제 → 잠금 전환 순간 감지 (UI 닫힘)
+        // Unity가 커서를 화면 중앙으로 강제 이동시켜 Mouse X/Y에 스파이크 발생
+        // → 0.2초간 look 입력 무시해서 NetYaw 점프 방지
+        if (isCursorLocked && !wasCursorLocked)
+            inputIgnoreUntil = Time.realtimeSinceStartup + 0.2f;
+        wasCursorLocked = isCursorLocked;
+
+        // 포커스 복귀 직후 or 커서 전환 직후: 빈 입력 전송
+        if (Time.realtimeSinceStartup < inputIgnoreUntil)
+        {
+            input.Set(data);
+            return;
+        }
+
+        // 커서 잠금 해제 상태(UI 열려있음)에서는 이동/look 입력 전송 안 함
+        if (!isCursorLocked)
+        {
+            input.Set(data);
+            return;
+        }
+        // 킬러 스폰/리스폰 감지 → Yaw 재초기화
+        var curKiller = KillerController.LocalKiller;
+        if (curKiller != lastKiller)
+        {
+            lastKiller = curKiller;
+            killerYawReady = false;
+        }
+
+        // 절대 Yaw 초기화 (킬러 스폰 시 1회)
+        if (!killerYawReady && curKiller != null)
+        {
+            killerYaw = curKiller.transform.eulerAngles.y;
+            killerYawReady = true;
+        }
+
+        // 매 프레임 마우스로 절대 Yaw 누적
+        if (killerYawReady)
+        {
+            float sens = curKiller?.mouseSensitivity ?? 2f;
+            killerYaw += Input.GetAxisRaw("Mouse X") * sens;
+            data.lookYaw = killerYaw;
+        }
+
+        // WASD 4방향 이동 (ActorController와 동일하게)
+        float h = 0f, v = 0f;
+        if (Input.GetKey(KeyCode.A)) h -= 1f;
+        if (Input.GetKey(KeyCode.D)) h += 1f;
+        if (Input.GetKey(KeyCode.W)) v += 1f;
+        if (Input.GetKey(KeyCode.S)) v -= 1f;
+        data.move = new Vector2(h, v).normalized;
+
+        data.look = new Vector2(0f, Input.GetAxisRaw("Mouse Y"));
 
         NetworkButtons buttons = default;
         if (Input.GetKey(KeyCode.LeftShift)) buttons.Set(PlayerNetworkInput.WALK, true);
         if (Input.GetKey(KeyCode.LeftControl)) buttons.Set(PlayerNetworkInput.SIT, true);
         if (Input.GetKey(KeyCode.H)) buttons.Set(PlayerNetworkInput.HEAL, true);
         if (Input.GetKeyDown(KeyCode.V)) buttons.Set(PlayerNetworkInput.VAULT, true);
-        if (Input.GetMouseButtonDown(0)) buttons.Set(PlayerNetworkInput.ATTACK, true);
+        // Fusion 네트워크 입력은 GetKey(지속)을 쓰는 게 안정적 - Tick과 Unity Frame이
+        // 1:1이 아니어서 GetMouseButtonDown이 특정 Tick에서 누락되거나 중복될 수 있음.
+        // 연속 공격 방지는 KillerController의 AttackCooldownTimer가 담당.
+        if (Input.GetMouseButton(0)) buttons.Set(PlayerNetworkInput.ATTACK, true);
 
         data.buttons = buttons;
+
+        // ─── 디버그 로그 (0.25초마다, 움직임 입력이 있을 때만) ─────
+        if (data.move.sqrMagnitude > 0.001f && Time.time - lastInputLogTime > 0.25f)
+        {
+            Debug.Log(
+                $"[InputSend] sentMove={data.move} " +
+                $"rawHV=({Input.GetAxisRaw("Horizontal"):F2},{Input.GetAxisRaw("Vertical"):F2}) " +
+                $"W={Input.GetKey(KeyCode.W)} A={Input.GetKey(KeyCode.A)} " +
+                $"S={Input.GetKey(KeyCode.S)} D={Input.GetKey(KeyCode.D)}");
+            lastInputLogTime = Time.time;
+        }
+
         input.Set(data);
     }
 

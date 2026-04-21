@@ -94,14 +94,15 @@ public class MouseLock : MonoBehaviour
                 break;
         }
 
-        Debug.Log("State: " + currentState);
-        Debug.Log("LockState: " + Cursor.lockState);
-        Debug.Log("Visible: " + Cursor.visible);
+        // ★ 수정: ApplyCursorState 호출 시에만 1회 로그 (Update에서 매 프레임 찍지 않음)
+        Debug.Log($"[MouseLock] 상태 변경 → State={currentState} | LockState={Cursor.lockState} | Visible={Cursor.visible}");
     }
 
+    // ★ 수정: Update에서 Debug.Log 완전 제거
+    // 이전 코드가 매 프레임 Debug.Log를 찍어서 초당 60개 로그 → 심각한 성능 저하 유발
     void Update()
     {
-        Debug.Log($"[MouseLock] 현재 상태: {currentState}");
+        // 필요한 로직이 생기면 여기에 추가
     }
 }
 

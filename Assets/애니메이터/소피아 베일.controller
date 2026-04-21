@@ -1739,14 +1739,14 @@ AnimatorController:
     m_DefaultInt: 0
     m_DefaultBool: 0
     m_Controller: {fileID: 9100000}
-  - m_Name: IsVaulting
-    m_Type: 4
+  - m_Name: Hit
+    m_Type: 9
     m_DefaultFloat: 0
     m_DefaultInt: 0
     m_DefaultBool: 0
     m_Controller: {fileID: 9100000}
-  - m_Name: Hit
-    m_Type: 9
+  - m_Name: IsVaulting
+    m_Type: 4
     m_DefaultFloat: 0
     m_DefaultInt: 0
     m_DefaultBool: 0
@@ -3011,7 +3011,7 @@ AnimatorState:
   m_MirrorParameterActive: 0
   m_CycleOffsetParameterActive: 0
   m_TimeParameterActive: 0
-  m_Motion: {fileID: 7400000, guid: eea6437a5812ac1458bb32093b7b259c, type: 2}
+  m_Motion: {fileID: 7400000, guid: c6c5e9f08a7240d4aac6fa7cb6d73166, type: 2}
   m_Tag: 
   m_SpeedParameter: 
   m_MirrorParameter: 

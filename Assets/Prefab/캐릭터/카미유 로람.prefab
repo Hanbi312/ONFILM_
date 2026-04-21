@@ -2050,7 +2050,7 @@ Animator:
   m_Controller: {fileID: 9100000, guid: d6176dd26cec20342b846fef3a358c1a, type: 2}
   m_CullingMode: 1
   m_UpdateMode: 0
-  m_ApplyRootMotion: 1
+  m_ApplyRootMotion: 0
   m_LinearVelocityBlending: 0
   m_StabilizeFeet: 0
   m_WarningMessage: 
@@ -2113,12 +2113,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e7e64bb4d6fc14047bb96ed5ca83bcff, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Cam: {fileID: 53399962779250554}
+  runSpeed: 10
   walkSpeed: 2.5
-  runSpeed: 5.5
   gravity: -20
   groundedStick: -2
-  spawnFreezeSeconds: 0.3
+  Cam: {fileID: 3909391620141690621}
   cameraRoot: {fileID: 6784720750598069596}
   playerCamera: {fileID: 5218412043700971179}
   audioListener: {fileID: 0}
@@ -2128,9 +2127,11 @@ MonoBehaviour:
   cameraSmoothing: 10
   attackCooldown: 0.6
   attackLockTime: 0.35
-  killerLight: {fileID: 1497583253590292863}
   carryOffset: {x: 0, y: 0.5, z: 0.8}
+  killerLight: {fileID: 1497583253590292863}
   _IsAttacking:
+    _value: 0
+  _NetIsCarrying:
     _value: 0
 --- !u!114 &7991614105654312571
 MonoBehaviour:

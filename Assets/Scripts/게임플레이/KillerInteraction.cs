@@ -23,7 +23,7 @@ public class KillerInteraction : MonoBehaviour
     private void Update()
     {
         if (killerController == null) return;
-        if (!killerController.HasInputAuthority && !killerController.HasStateAuthority) return;
+        if (!killerController.HasInputAuthority) return;
 
         if (isCarrying)
         {
@@ -84,7 +84,9 @@ public class KillerInteraction : MonoBehaviour
             // 악역 카메라 미니게임 진행 중인 연기자는 상호작용 불가 (네트워크 동기화 기반)
             if (actor.Object != null && busyActorIds.Contains(actor.Object.Id)) continue;
 
-            float dist = Vector3.Distance(transform.position, actor.transform.position);
+            // 수평(XZ) 거리만 사용 → 높은 오브젝트 위에 있어도 바로 아래에서 감지 가능
+            Vector3 delta = actor.transform.position - transform.position;
+            float dist = new Vector2(delta.x, delta.z).magnitude;
             if (dist < closestDist) { closestDist = dist; closest = actor; }
         }
         return closest;
@@ -124,19 +126,21 @@ public class KillerInteraction : MonoBehaviour
     {
         if (carriedActor == null) return;
 
-        // 연기자를 spawnPoint로 텔레포트
-        if (cam.spawnPoint != null)
-            carriedActor.RPC_Teleport(cam.spawnPoint.position, cam.spawnPoint.rotation);
-
-        // actorId 미리 저장
         var actorNetId = carriedActor.GetComponent<NetworkObject>().Id;
+        var actor = carriedActor; // null 처리 전에 참조 저장
 
-        // 내려놓기
+        // ★ 순서 중요: StopCarry를 먼저 → FixedUpdateNetwork의 carry 위치 덮어쓰기 차단
+        // 이전 코드(Teleport → StopCarry)는 두 RPC 사이에 FixedUpdateNetwork 한 틱이 실행되면
+        // carriedActorRef.position = killer 위치로 덮어써 텔레포트가 무시됐음
         killerController.RPC_StopCarry(actorNetId);
         carriedActor = null;
         isCarrying = false;
 
-        // 서버에 VillainCamera 활성화 요청 (대상 연기자 ID 포함)
+        // carry 해제 후 spawnPoint로 텔레포트 (이제 carry 시스템이 위치를 덮어쓰지 않음)
+        if (cam.spawnPoint != null)
+            actor.RPC_Teleport(cam.spawnPoint.position, cam.spawnPoint.rotation);
+
+        // 서버에 VillainCamera 미니게임 활성화 요청
         cam.RPC_StartMiniGame(actorNetId);
 
         GameStateManager.Instance?.HideFKeyHint();

@@ -21,9 +21,8 @@ public class ActorInteraction : MonoBehaviour
     private bool isHealingOther = false;      // 타인 치료 중 여부
     private ActorController lastHealedActor = null; // nearInjuredActor가 null이 돼도 RPC 호출하기 위한 캐시
 
-    // HealGaugeHUD에서 치료 진행도 UI를 표시하기 위해 외부 노출
     public bool IsHealingOther => isHealingOther;
-    public ActorController HealTarget  => lastHealedActor;
+    public ActorController HealTarget => lastHealedActor;
 
     private float actPoint = 0f;
     private bool isActing = false;
@@ -320,29 +319,46 @@ public class ActorInteraction : MonoBehaviour
         float closestDist = interactRange;
         string hint = null;
 
+        // [Networked] 변수 접근 전에 Object.IsValid 확인
+        // Object.IsValid = false 상태에서 [Networked] 변수에 접근하면 Fusion 예외 발생
+        bool gsmReady = GameStateManager.Instance != null
+                        && GameStateManager.Instance.Object != null
+                        && GameStateManager.Instance.Object.IsValid;
+
         var films = FindObjectsByType<FilmItem>(FindObjectsSortMode.None);
         foreach (var film in films)
         {
-            if (!film.gameObject.activeSelf || film.IsPickedUp) continue;
+            if (!film.gameObject.activeSelf) continue;
+            // film.Object가 유효할 때만 [Networked] IsPickedUp 접근
+            if (film.Object == null || !film.Object.IsValid) continue;
+            if (film.IsPickedUp) continue;
             float dist = Vector3.Distance(transform.position, film.transform.position);
             if (dist < closestDist) { closestDist = dist; nearFilm = film; hint = "필름 획득"; }
         }
 
-        if (nearFilm != null) { GameStateManager.Instance?.ShowFKeyHint(hint); }
+        if (nearFilm != null)
+        {
+            GameStateManager.Instance?.ShowFKeyHint(hint);
+        }
         else
         {
-            bool teamHasFilm = GameStateManager.Instance != null && GameStateManager.Instance.HasFilm;
+            bool teamHasFilm = gsmReady && GameStateManager.Instance.HasFilm;
             if (teamHasFilm)
             {
                 var scripts = FindObjectsByType<ScriptItem>(FindObjectsSortMode.None);
                 foreach (var s in scripts)
                 {
-                    if (!s.gameObject.activeSelf || s.IsPickedUp) continue;
+                    if (!s.gameObject.activeSelf) continue;
+                    if (s.Object == null || !s.Object.IsValid) continue;
+                    if (s.IsPickedUp) continue;
                     float dist = Vector3.Distance(transform.position, s.transform.position);
                     if (dist < closestDist) { closestDist = dist; nearScript = s; hint = "각본 획득"; }
                 }
 
-                if (nearScript != null) { GameStateManager.Instance?.ShowFKeyHint(hint); }
+                if (nearScript != null)
+                {
+                    GameStateManager.Instance?.ShowFKeyHint(hint);
+                }
                 else
                 {
                     bool canInteractCamera = linkedCamera != null || scriptCount > 0;
@@ -351,6 +367,7 @@ public class ActorInteraction : MonoBehaviour
                         var cameras = FindObjectsByType<SecurityCamera>(FindObjectsSortMode.None);
                         foreach (var cam in cameras)
                         {
+                            if (cam.Object == null || !cam.Object.IsValid) continue;
                             if (cam.IsCameraOff || !cam.IsLightOn) continue;
                             if (linkedCamera != null && cam != linkedCamera) continue;
                             float dist = Vector3.Distance(transform.position, cam.transform.position);
@@ -377,6 +394,7 @@ public class ActorInteraction : MonoBehaviour
             foreach (var actor in actors)
             {
                 if (actor == actorController) continue;
+                if (actor.Object == null || !actor.Object.IsValid) continue;
                 if (!actor.IsInjury || actor.IsDead) continue;
                 float dist = Vector3.Distance(transform.position, actor.transform.position);
                 if (dist < healClosestDist) { healClosestDist = dist; nearInjuredActor = actor; }
@@ -387,6 +405,8 @@ public class ActorInteraction : MonoBehaviour
     // ─── F키 입력 처리 ─────────────────────────
     private void HandleInput()
     {
+        // 악역에게 들려있는 동안에는 모든 상호작용(아이템 획득·카메라 작업 등) 차단
+        if (actorController.NetIsCarried) return;
         if (nearFilm != null && Input.GetKeyDown(KeyCode.F))
         {
             hasPickedUpFilm = true;

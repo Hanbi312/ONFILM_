@@ -134,7 +134,10 @@ public class PoseGame : MonoBehaviour
 
             if (generator != null) generator.EndMiniGame();
             else if (securityCamera != null) securityCamera.EndMiniGame();
-            else if (villainCamera != null) villainCamera.EndMiniGame();
+            // VillainCamera는 실패해도 게이지 루프가 계속되므로 EndMiniGame() 호출 금지
+            // EndMiniGame()이 StateAuthority(호스트)에서 IsMiniGameActiveNet=false를 즉시 세팅하면
+            // HandleVillainCameraGame의 !IsMiniGameActiveNet 체크가 트리거되어 연기자가 풀려버림
+            // UI 정리(HideMiniGame, 커서 복원)는 failCallback이 이미 처리함
         }
 
         onSuccess = null;
@@ -149,6 +152,7 @@ public class PoseGame : MonoBehaviour
 
         if (generator != null) generator.EndMiniGame();
         else if (securityCamera != null) securityCamera.EndMiniGame();
-        else if (villainCamera != null) villainCamera.EndMiniGame();
+        // VillainCamera 타임아웃도 실패와 동일하게 EndMiniGame() 호출 금지
+        // (이유 동일: IsMiniGameActiveNet=false 조기 세팅 → 연기자 풀림 방지)
     }
 }
