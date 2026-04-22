@@ -76,7 +76,7 @@ public class EndingGaugeHUD : MonoBehaviour
             }
             else if (i < maxHappyCount + maxBadCount)
             {
-                int badSlotIndex = (maxHappyCount + maxBadCount - 1) - i;
+                int badSlotIndex = i - maxHappyCount;
                 active = badSlotIndex < badCount;
             }
             else

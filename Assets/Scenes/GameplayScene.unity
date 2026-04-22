@@ -1731,7 +1731,6 @@ GameObject:
   - component: {fileID: 127814194}
   - component: {fileID: 127814193}
   - component: {fileID: 127814192}
-  - component: {fileID: 127814191}
   - component: {fileID: 127814190}
   m_Layer: 5
   m_Name: Esc
@@ -1739,7 +1738,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &127814190
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1759,23 +1758,6 @@ MonoBehaviour:
   audioMixerMenu: {fileID: 24100000, guid: a1fee8dfc19ebb846860423513fb4fd5, type: 2}
   sensitivityMin: 0.1
   sensitivityMax: 5
---- !u!114 &127814191
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 127814189}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 51b57c6e769c21c4a8f2e0a4f93240e1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  keyTexts: []
-  defaultColor: {r: 0, g: 0, b: 0, a: 1}
-  activeColor: {r: 1, g: 0, b: 0, a: 1}
-  warningText: {fileID: 0}
-  warningDuration: 1
 --- !u!114 &127814192
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6075,7 +6057,7 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 417724509}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0

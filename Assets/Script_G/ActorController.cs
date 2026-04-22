@@ -529,7 +529,7 @@ public class ActorController : NetworkBehaviour
                 killer = follower.ownerKiller;
 
             // 공격 중이 아니면 데미지 없음
-            if (killer == null || !killer.IsAttacking) return;
+            //if (killer == null || !killer.IsAttacking) return;
 
             bool wasInjury = IsInjury;
             Health -= 1f;

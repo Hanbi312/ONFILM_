@@ -56,6 +56,30 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
     private float inputIgnoreUntil = 0f;
     private const float FocusRegainBlockDuration = 0.15f;
 
+    // InputProvider와 동일한 폴백 키맵 (KeySetting이 비어 있을 때 사용)
+    private static readonly Dictionary<KeyAction, KeyCode> fallbackKeys = new Dictionary<KeyAction, KeyCode>
+    {
+        { KeyAction.UP,          KeyCode.W           },
+        { KeyAction.DOWN,        KeyCode.S           },
+        { KeyAction.LEFT,        KeyCode.A           },
+        { KeyAction.RIGHT,       KeyCode.D           },
+        { KeyAction.WALK,        KeyCode.LeftShift   },
+        { KeyAction.SIT,         KeyCode.LeftControl  },
+        { KeyAction.INTERACTION, KeyCode.Mouse0      },
+        { KeyAction.HEAL,        KeyCode.H           },
+        { KeyAction.VAULT,       KeyCode.V           },
+    };
+
+    // KeySetting 우선, 없으면 폴백 사용 (InputProvider.GetKeySafe와 동일 로직)
+    private static bool GetKeyForInput(KeyAction action)
+    {
+        if (KeySetting.keys.TryGetValue(action, out var key))
+            return Input.GetKey(key);
+        if (fallbackKeys.TryGetValue(action, out var fallback))
+            return Input.GetKey(fallback);
+        return false;
+    }
+
     private void Awake()
     {
         if (Instance == null)
@@ -621,7 +645,7 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
             if (killerCtrl != null)
             {
                 obj.gameObject.SetActive(true);
-                killerCtrl.RPC_ResumeAfterMigration();
+                //killerCtrl.RPC_ResumeAfterMigration();
                 Debug.Log($"[FusionLobbyManager] 악역 복원 → {obj.name}");
                 continue;
             }
@@ -915,11 +939,6 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
     // 커서 잠금 상태 추적 (전환 감지용)
     private bool wasCursorLocked = true;
 
-    // 킬러 절대 Yaw 추적 (delta 누적 오차 방지)
-    private float killerYaw = 0f;
-    private bool killerYawReady = false;
-    private KillerController lastKiller = null;
-
     public void OnInput(NetworkRunner runner, NetworkInput input)
     {
         PlayerNetworkInput data = new PlayerNetworkInput();
@@ -946,48 +965,27 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
             input.Set(data);
             return;
         }
-        // 킬러 스폰/리스폰 감지 → Yaw 재초기화
-        var curKiller = KillerController.LocalKiller;
-        if (curKiller != lastKiller)
-        {
-            lastKiller = curKiller;
-            killerYawReady = false;
-        }
 
-        // 절대 Yaw 초기화 (킬러 스폰 시 1회)
-        if (!killerYawReady && curKiller != null)
-        {
-            killerYaw = curKiller.transform.eulerAngles.y;
-            killerYawReady = true;
-        }
+        // InputProvider와 동일한 방식: 직접 키 체크 (GetAxisRaw는 조이스틱
+        // 드리프트나 Input Manager 축 중복 정의로 엉뚱한 값이 섞일 수 있음)
+        Vector2 move = Vector2.zero;
+        if (GetKeyForInput(KeyAction.LEFT))  move.x -= 1f;
+        if (GetKeyForInput(KeyAction.RIGHT)) move.x += 1f;
+        if (GetKeyForInput(KeyAction.UP))    move.y += 1f;
+        if (GetKeyForInput(KeyAction.DOWN))  move.y -= 1f;
+        data.move = move.sqrMagnitude > 1f ? move.normalized : move;
 
-        // 매 프레임 마우스로 절대 Yaw 누적
-        if (killerYawReady)
-        {
-            float sens = curKiller?.mouseSensitivity ?? 2f;
-            killerYaw += Input.GetAxisRaw("Mouse X") * sens;
-            data.lookYaw = killerYaw;
-        }
-
-        // WASD 4방향 이동 (ActorController와 동일하게)
-        float h = 0f, v = 0f;
-        if (Input.GetKey(KeyCode.A)) h -= 1f;
-        if (Input.GetKey(KeyCode.D)) h += 1f;
-        if (Input.GetKey(KeyCode.W)) v += 1f;
-        if (Input.GetKey(KeyCode.S)) v -= 1f;
-        data.move = new Vector2(h, v).normalized;
-
-        data.look = new Vector2(0f, Input.GetAxisRaw("Mouse Y"));
+        data.look = new Vector2(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y"));
 
         NetworkButtons buttons = default;
-        if (Input.GetKey(KeyCode.LeftShift)) buttons.Set(PlayerNetworkInput.WALK, true);
-        if (Input.GetKey(KeyCode.LeftControl)) buttons.Set(PlayerNetworkInput.SIT, true);
-        if (Input.GetKey(KeyCode.H)) buttons.Set(PlayerNetworkInput.HEAL, true);
-        if (Input.GetKeyDown(KeyCode.V)) buttons.Set(PlayerNetworkInput.VAULT, true);
+        if (GetKeyForInput(KeyAction.WALK))  buttons.Set(PlayerNetworkInput.WALK, true);
+        if (GetKeyForInput(KeyAction.SIT))   buttons.Set(PlayerNetworkInput.SIT, true);
+        if (GetKeyForInput(KeyAction.HEAL))  buttons.Set(PlayerNetworkInput.HEAL, true);
+        if (GetKeyForInput(KeyAction.VAULT)) buttons.Set(PlayerNetworkInput.VAULT, true);
         // Fusion 네트워크 입력은 GetKey(지속)을 쓰는 게 안정적 - Tick과 Unity Frame이
         // 1:1이 아니어서 GetMouseButtonDown이 특정 Tick에서 누락되거나 중복될 수 있음.
         // 연속 공격 방지는 KillerController의 AttackCooldownTimer가 담당.
-        if (Input.GetMouseButton(0)) buttons.Set(PlayerNetworkInput.ATTACK, true);
+        if (GetKeyForInput(KeyAction.INTERACTION)) buttons.Set(PlayerNetworkInput.ATTACK, true);
 
         data.buttons = buttons;
 
@@ -996,7 +994,6 @@ public class FusionLobbyManager : MonoBehaviour, INetworkRunnerCallbacks
         {
             Debug.Log(
                 $"[InputSend] sentMove={data.move} " +
-                $"rawHV=({Input.GetAxisRaw("Horizontal"):F2},{Input.GetAxisRaw("Vertical"):F2}) " +
                 $"W={Input.GetKey(KeyCode.W)} A={Input.GetKey(KeyCode.A)} " +
                 $"S={Input.GetKey(KeyCode.S)} D={Input.GetKey(KeyCode.D)}");
             lastInputLogTime = Time.time;

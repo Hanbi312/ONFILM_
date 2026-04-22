@@ -1,331 +1,416 @@
-﻿using Fusion;
+using Fusion;
 using UnityEngine;
 
 [RequireComponent(typeof(CharacterController))]
 [RequireComponent(typeof(NetworkTransform))]
 public class KillerController : NetworkBehaviour
 {
-    // ─── Inspector ────────────────────────────────────────────
     [Header("Movement")]
-    public float runSpeed  = 5.5f;
+    public GameObject Cam;
     public float walkSpeed = 2.5f;
+    public float runSpeed = 5.5f;
 
     [Header("Gravity")]
-    public float gravity       = -20f;
+    public float gravity = -20f;
     public float groundedStick = -2f;
 
+    [Header("Spawn Stabilizing")]
+    public float spawnFreezeSeconds = 0.30f;
+
     [Header("Camera")]
-    public GameObject    Cam;
-    public Transform     cameraRoot;
-    public Camera        playerCamera;
+    public Transform cameraRoot;
+    public Camera playerCamera;
     public AudioListener audioListener;
     public float mouseSensitivity = 2.0f;
-    public float pitchMin         = -35f;
-    public float pitchMax         =  70f;
-    public float cameraSmoothing  = 30f;
+    public float pitchMin = -35f;
+    public float pitchMax = 70f;
+    public float cameraSmoothing = 30f;
 
     [Header("Combat")]
     public float attackCooldown = 0.6f;
     public float attackLockTime = 0.35f;
 
-    [Header("Carry")]
-    public Vector3 carryOffset = new Vector3(0f, 0.5f, 0.8f);
-
     [Header("Light")]
     public Light killerLight;
 
-    // ─── Networked ────────────────────────────────────────────
-    [Networked] private float              NetYaw          { get; set; }
-    [Networked] private float              NetPitch        { get; set; }
-    [Networked] private float              YVelocity       { get; set; }
-    [Networked] public  NetworkBool        IsAttacking     { get; set; }
-    [Networked] private TickTimer          AttackCooldown  { get; set; }
-    [Networked] private TickTimer          AttackLock      { get; set; }
-    [Networked] public  NetworkBool        NetIsCarrying   { get; set; }
-    [Networked] private NetworkBool        NetIsMoving     { get; set; }
-    [Networked] private NetworkBool        NetDoAttack     { get; set; }
-    [Networked] private NetworkString<_32> NetAttackTrigger{ get; set; }
-    [Networked] private NetworkBool        NetLightOn      { get; set; }
+    [Header("Carry")]
+    [SerializeField] public Vector3 carryOffset = new Vector3(0f, 0.5f, 0.8f);
 
-    // ─── Private ──────────────────────────────────────────────
+    [Networked] private float NetYaw { get; set; }
+    [Networked] private float NetPitch { get; set; }
+    [Networked] private float YVelocity { get; set; }
+
+    [Networked] public NetworkBool IsAttacking { get; set; }
+    [Networked] private TickTimer AttackCooldownTimer { get; set; }
+    [Networked] private TickTimer AttackLockTimer { get; set; }
+
+    [Networked] private NetworkBool NetLightOn { get; set; }
+    [Networked] private NetworkBool NetIsCarrying { get; set; }
+
+    [Networked] private NetworkBool NetIsMoving { get; set; }
+    [Networked] private NetworkBool NetIsWalking { get; set; }
+    [Networked] private NetworkBool NetDoAttack { get; set; }
+    [Networked] private NetworkString<_32> NetAttackTrigger { get; set; }
+
+    private static readonly int IsMovingHash = Animator.StringToHash("IsMoving");
+    private static readonly int IsWalkingHash = Animator.StringToHash("IsWalking");
+    private static readonly int IsCarryingHash = Animator.StringToHash("IsCarrying");
+
+    private float localFreezeTimer = 0f;
+    private bool isFrozen = true;
+    private bool lastAttackState = false;
     private CharacterController cc;
-    private Animator            anim;
-    private NetworkTransform    netTransform;
-    private ActorController     carriedActor;
-    private bool                isFrozen;
-    private float               localPitch;
-    private bool                localPitchReady;
-    private bool                lastAttackState;
+    private Animator anim;
+    private NetworkTransform netTransform;
+    private ActorController carriedActorRef = null;
 
-    // 로컬 플레이어 악역 참조 (FusionLobbyManager에서 카메라 Yaw 전송용)
-    public static KillerController LocalKiller { get; private set; }
+    // 클라이언트 전용 로컬 카메라 회전값 (네트워크 변수 대신 사용)
+    private float localYaw = 0f;
+    private float localPitch = 0f;
+    private bool localYawInitialized = false;
 
-    private static readonly int HashIsMoving  = Animator.StringToHash("IsMoving");
-    private static readonly int HashIsCarrying= Animator.StringToHash("IsCarrying");
-    private static readonly int HashPickup    = Animator.StringToHash("Pickup");
-
-    // ═══════════════════════════════════════════════════════════
-    // 생명주기
-    // ═══════════════════════════════════════════════════════════
     private void Awake()
     {
-        cc           = GetComponent<CharacterController>();
-        anim         = GetComponentInChildren<Animator>();
+        cc = GetComponent<CharacterController>();
+        anim = GetComponent<Animator>();
         netTransform = GetComponent<NetworkTransform>();
-        if (anim != null) anim.applyRootMotion = false;
     }
 
     public override void Spawned()
     {
         bool isLocal = HasInputAuthority;
-        cc.enabled = false;
 
-        if (Cam          != null) Cam.SetActive(isLocal);
-        if (playerCamera != null) playerCamera.enabled  = isLocal;
-        if (audioListener!= null) audioListener.enabled = isLocal;
+        if (cc != null) cc.enabled = false;
 
-        // 로컬 악역 등록 (카메라 Yaw 전송용)
-        if (isLocal) LocalKiller = this;
+        if (Cam != null) Cam.SetActive(isLocal);
+        if (playerCamera != null) playerCamera.enabled = isLocal;
+        if (audioListener != null) audioListener.enabled = isLocal;
 
         if (HasStateAuthority)
         {
-            NetYaw           = transform.eulerAngles.y;
-            NetPitch         = 0f;
-            YVelocity        = 0f;
-            isFrozen         = false;
-            NetLightOn       = true;
-            NetAttackTrigger = "Attack_shorts";
-            cc.enabled       = true;
+            NetYaw = transform.eulerAngles.y;
+            NetPitch = 0f;
+            YVelocity = 0f;
+            isFrozen = false;
+            if (cc != null) cc.enabled = true;
+            NetLightOn = true;
+            NetAttackTrigger = "Attack";
         }
         else
         {
-            isFrozen        = false;
-            localPitchReady = false;
+            isFrozen = false;
+            if (cc != null) cc.enabled = false;
+            // FixedUpdateNetwork 첫 실행 시 NetYaw로 초기화되도록 플래그 리셋
+            localYawInitialized = false;
         }
-
-        // 로컬 플레이어: cameraRoot Y 회전 초기화 (프리팹 베이크값 제거)
-        if (isLocal && cameraRoot != null)
-            cameraRoot.localRotation = Quaternion.Euler(0f, 0f, 0f);
 
         if (isLocal)
         {
             Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible   = false;
+            Cursor.visible = false;
         }
     }
 
     private void Update()
     {
-        // 클라이언트: localPitch 초기 동기화
-        if (HasInputAuthority && !HasStateAuthority
-            && !localPitchReady && Object != null && Object.IsValid)
+        if (isFrozen && HasStateAuthority)
         {
-            localPitch      = NetPitch;
-            localPitchReady = true;
+            localFreezeTimer += Time.deltaTime;
+            if (localFreezeTimer >= spawnFreezeSeconds)
+            {
+                isFrozen = false;
+                if (cc != null) cc.enabled = true;
+            }
         }
 
-        // 클라이언트: 마우스 Y 로컬 즉시 반영
-        if (HasInputAuthority && !HasStateAuthority)
+        if (HasStateAuthority)
         {
-            localPitch -= Input.GetAxis("Mouse Y") * mouseSensitivity;
-            localPitch  = Mathf.Clamp(localPitch, pitchMin, pitchMax);
+            // 서버: 네트워크 변수 기반 애니메이션
+            ApplyAnimator();
+        }
+        else if (HasInputAuthority)
+        {
+            // 클라이언트 본인: 로컬 입력 기반 애니메이션 (즉시 반영)
+            ApplyAnimatorFromInput();
+        }
+        else
+        {
+            // 다른 플레이어 프록시: 네트워크 변수 기반 애니메이션
+            ApplyAnimator();
         }
 
-        UpdateAnimator();
+        ApplyLight();
+    }
 
-        if (killerLight != null && Object != null && Object.IsValid)
+    private void ApplyAnimator()
+    {
+        if (anim == null) return;
+        if (Object == null || !Object.IsValid) return;
+
+        anim.SetBool(IsMovingHash, NetIsMoving);
+        anim.SetBool(IsWalkingHash, NetIsWalking);
+        anim.SetBool(IsCarryingHash, NetIsCarrying);
+
+        if (NetDoAttack && !lastAttackState)
+        {
+            string trigger = NetAttackTrigger.ToString();
+            if (!string.IsNullOrEmpty(trigger))
+                anim.SetTrigger(trigger);
+        }
+
+        if (!NetDoAttack && lastAttackState)
+        {
+            string trigger = NetAttackTrigger.ToString();
+            if (!string.IsNullOrEmpty(trigger))
+                anim.ResetTrigger(trigger);
+        }
+
+        lastAttackState = NetDoAttack;
+    }
+
+    private void ApplyLight()
+    {
+        if (Object == null || !Object.IsValid) return;
+        if (killerLight != null)
             killerLight.enabled = NetLightOn;
+    }
+
+    public void SetLight(bool on)
+    {
+        if (!HasStateAuthority) return;
+        NetLightOn = on;
+    }
+
+    public void SetAttackTrigger(string trigger)
+    {
+        if (!HasStateAuthority) return;
+        NetAttackTrigger = trigger;
+    }
+
+    public override void FixedUpdateNetwork()
+    {
+        if (!HasStateAuthority && !HasInputAuthority) return;
+        if (isFrozen) return;
+        if (!GetInput(out PlayerNetworkInput input)) return;
+
+        if (HasStateAuthority)
+        {
+            HandleLook(input);
+            HandleAttack(input);
+            MoveAndAnimate(input);
+
+            if (NetIsCarrying && carriedActorRef != null)
+            {
+                var actorCc = carriedActorRef.GetComponent<CharacterController>();
+                if (actorCc != null) actorCc.enabled = false;
+                carriedActorRef.transform.position = transform.position + transform.TransformDirection(carryOffset);
+                carriedActorRef.transform.rotation = transform.rotation;
+            }
+            else if (!NetIsCarrying && carriedActorRef != null)
+            {
+                var actorCc = carriedActorRef.GetComponent<CharacterController>();
+                if (actorCc != null) actorCc.enabled = true;
+                carriedActorRef = null;
+            }
+        }
+        else if (HasInputAuthority)
+        {
+            // 클라이언트 본인: 로컬 카메라 회전만 처리 (이동은 서버가 담당)
+            HandleLookLocal(input);
+        }
     }
 
     private void LateUpdate()
     {
-        if (!HasInputAuthority || cameraRoot == null) return;
-        float pitch = HasStateAuthority ? NetPitch : localPitch;
-        cameraRoot.localRotation = Quaternion.Lerp(
-            cameraRoot.localRotation,
-            Quaternion.Euler(pitch, 0f, 0f),
-            Time.deltaTime * cameraSmoothing);
+        if (HasInputAuthority && cameraRoot != null)
+        {
+            // 클라이언트는 localPitch, 서버(호스트)는 NetPitch 사용
+            float pitch = HasStateAuthority ? NetPitch : localPitch;
+            Quaternion targetRot = Quaternion.Euler(pitch, 0f, 0f);
+            cameraRoot.localRotation = Quaternion.Lerp(cameraRoot.localRotation, targetRot, Time.deltaTime * cameraSmoothing);
+        }
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // 네트워크 업데이트 (서버 전용)
-    // ═══════════════════════════════════════════════════════════
-    public override void FixedUpdateNetwork()
-    {
-        if (!HasStateAuthority) return;
-        if (isFrozen) return;
-        if (!GetInput(out PlayerNetworkInput input)) return;
-
-        HandleLook(input);
-        HandleMovement(input);
-        HandleAttack(input);
-        HandleCarryPosition();
-    }
-
-    // ─── 회전 ─────────────────────────────────────────────────
     private void HandleLook(PlayerNetworkInput input)
     {
-        // 클라이언트가 추적한 절대 Yaw를 그대로 사용 → 누적 오차, oscillation 없음
-        // lookYaw=0은 킬러 초기화 전이므로 기존 NetYaw 유지
-        if (!Mathf.Approximately(input.lookYaw, 0f))
-            NetYaw = input.lookYaw;
-
-        float pitchDelta = Mathf.Clamp(input.look.y * mouseSensitivity, -20f, 20f);
-        NetPitch -= pitchDelta;
-        NetPitch  = Mathf.Clamp(NetPitch, pitchMin, pitchMax);
+        NetYaw += input.look.x * mouseSensitivity;
+        NetPitch -= input.look.y * mouseSensitivity;
+        NetPitch = Mathf.Clamp(NetPitch, pitchMin, pitchMax);
         transform.rotation = Quaternion.Euler(0f, NetYaw, 0f);
     }
 
-    // ─── 이동 ─────────────────────────────────────────────────
-    private void HandleMovement(PlayerNetworkInput input)
+    // 클라이언트 로컬 카메라 회전 (네트워크 변수 쓰지 않음 → pitch만 즉시 반영)
+    private void HandleLookLocal(PlayerNetworkInput input)
     {
-        if (!cc.enabled) return;
+        // 최초 1회: 서버의 NetYaw/NetPitch로 로컬 값 동기화
+        if (!localYawInitialized)
+        {
+            localYaw = NetYaw;
+            localPitch = NetPitch;
+            localYawInitialized = true;
+        }
 
-        // ActorController와 동일하게 WASD 4방향 입력 처리
-        Vector3 inputDir = new Vector3(input.move.x, 0f, input.move.y).normalized;
-        Vector3 moveDir  = (transform.forward * inputDir.z + transform.right * inputDir.x).normalized;
+        localPitch -= input.look.y * mouseSensitivity;
+        localPitch = Mathf.Clamp(localPitch, pitchMin, pitchMax);
 
-        if (cc.isGrounded && YVelocity < 0f) YVelocity = groundedStick;
-        YVelocity = Mathf.Max(YVelocity + gravity * Runner.DeltaTime, -30f);
-
-        cc.Move((moveDir * (IsAttacking ? walkSpeed : runSpeed)
-                + Vector3.up * YVelocity) * Runner.DeltaTime);
-
-        NetIsMoving = inputDir.sqrMagnitude > 0.001f;
+        // 3인칭: transform.rotation(yaw)은 NetworkTransform이 서버 NetYaw로 동기화
+        // 로컬에서 직접 세팅하면 서버 이동 방향과 시각적 몸통 방향이 어긋남
     }
 
-    // ─── 공격 ─────────────────────────────────────────────────
-    private void HandleAttack(PlayerNetworkInput input)
+    // 클라이언트 본인 - Update()에서 직접 Input 읽어 애니메이션 처리 (즉시 반영)
+    private void ApplyAnimatorFromInput()
     {
-        if (IsAttacking)
+        if (anim == null) return;
+        if (Object == null || !Object.IsValid) return;
+
+        // 문 상호작용 중 이동 애니메이션 차단 (서버의 MoveAndAnimate와 동기화)
+        if (IsDoorLocked)
         {
-            if (AttackLock.Expired(Runner)) { IsAttacking = false; NetDoAttack = false; }
+            anim.SetBool(IsMovingHash, false);
+            anim.SetBool(IsWalkingHash, false);
+            anim.SetBool(IsCarryingHash, NetIsCarrying);
             return;
         }
 
-        if (!AttackCooldown.ExpiredOrNotRunning(Runner)) return;
+        // KeySetting 기반으로 이동 키 읽기 (InputProvider와 동일한 키 사용)
+        float h = 0f, v = 0f;
+        if (KeySetting.keys.TryGetValue(KeyAction.LEFT,  out var kL) && Input.GetKey(kL)) h -= 1f;
+        if (KeySetting.keys.TryGetValue(KeyAction.RIGHT, out var kR) && Input.GetKey(kR)) h += 1f;
+        if (KeySetting.keys.TryGetValue(KeyAction.UP,    out var kU) && Input.GetKey(kU)) v += 1f;
+        if (KeySetting.keys.TryGetValue(KeyAction.DOWN,  out var kD) && Input.GetKey(kD)) v -= 1f;
 
-        if (input.buttons.IsSet(PlayerNetworkInput.ATTACK))
-        {
-            IsAttacking    = true;
-            NetDoAttack    = true;
-            AttackLock     = TickTimer.CreateFromSeconds(Runner, attackLockTime);
-            AttackCooldown = TickTimer.CreateFromSeconds(Runner, attackCooldown);
-        }
-    }
+        bool isMoving = new Vector2(h, v).sqrMagnitude > 0.001f;
 
-    // ─── 시체 위치 동기화 ─────────────────────────────────────
-    private void HandleCarryPosition()
-    {
-        if (!NetIsCarrying || carriedActor == null) return;
+        anim.SetBool(IsMovingHash, isMoving);
+        anim.SetBool(IsWalkingHash, false);
+        anim.SetBool(IsCarryingHash, NetIsCarrying);
 
-        if (carriedActor.Object == null || !carriedActor.Object.IsValid)
-        {
-            carriedActor = null; NetIsCarrying = false; return;
-        }
-
-        var actorCc = carriedActor.GetComponent<CharacterController>();
-        if (actorCc != null) actorCc.enabled = false;
-
-        carriedActor.transform.position = transform.position
-            + transform.TransformDirection(carryOffset);
-        carriedActor.transform.rotation = transform.rotation;
-    }
-
-    // ─── 충돌 ─────────────────────────────────────────────────
-    private void OnControllerColliderHit(ControllerColliderHit hit)
-    {
-        if (!HasStateAuthority) return;
-        if (hit.gameObject.CompareTag("wall") && YVelocity > 0f)
-            YVelocity = 0f;
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // 애니메이터
-    // ═══════════════════════════════════════════════════════════
-    private void UpdateAnimator()
-    {
-        if (anim == null || Object == null || !Object.IsValid) return;
-
-        anim.SetBool(HashIsMoving,   NetIsMoving);
-        anim.SetBool(HashIsCarrying, NetIsCarrying);
-
+        // 공격 트리거는 네트워크 변수 기반 유지 (서버 판정이라 로컬 예측 불가)
         if (NetDoAttack && !lastAttackState)
         {
-            string t = NetAttackTrigger.ToString();
-            if (!string.IsNullOrEmpty(t)) anim.SetTrigger(t);
+            string trigger = NetAttackTrigger.ToString();
+            if (!string.IsNullOrEmpty(trigger))
+                anim.SetTrigger(trigger);
         }
+
         if (!NetDoAttack && lastAttackState)
         {
-            string t = NetAttackTrigger.ToString();
-            if (!string.IsNullOrEmpty(t)) anim.ResetTrigger(t);
+            string trigger = NetAttackTrigger.ToString();
+            if (!string.IsNullOrEmpty(trigger))
+                anim.ResetTrigger(trigger);
         }
+
         lastAttackState = NetDoAttack;
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // 외부 호출
-    // ═══════════════════════════════════════════════════════════
-    public void SetLight(bool on)          { if (HasStateAuthority) NetLightOn        = on; }
-    public void SetAttackTrigger(string t) { if (HasStateAuthority) NetAttackTrigger  = t;  }
-
-    // ═══════════════════════════════════════════════════════════
-    // RPC
-    // ═══════════════════════════════════════════════════════════
-    [Rpc(RpcSources.All, RpcTargets.All)]
-    public void RPC_Teleport(Vector3 pos, Quaternion rot)
+    private void HandleAttack(PlayerNetworkInput input)
     {
-        cc.enabled = false;
-        if (netTransform != null) netTransform.Teleport(pos, rot);
-        else { transform.position = pos; transform.rotation = rot; }
+        bool attackPressed = input.buttons.IsSet(PlayerNetworkInput.ATTACK);
 
-        if (HasStateAuthority) { NetYaw = rot.eulerAngles.y; NetPitch = 0f; YVelocity = 0f; }
-        if (HasInputAuthority && !HasStateAuthority) localPitchReady = false;
-        cc.enabled = HasStateAuthority;
+        if (IsAttacking)
+        {
+            if (AttackLockTimer.Expired(Runner))
+            {
+                IsAttacking = false;
+                NetDoAttack = false;
+            }
+            return;
+        }
+
+        if (!AttackCooldownTimer.ExpiredOrNotRunning(Runner)) return;
+
+        if (attackPressed)
+        {
+            IsAttacking = true;
+            NetDoAttack = true;
+            AttackLockTimer = TickTimer.CreateFromSeconds(Runner, attackLockTime);
+            AttackCooldownTimer = TickTimer.CreateFromSeconds(Runner, attackCooldown);
+        }
     }
 
-    [Rpc(RpcSources.All, RpcTargets.All)]
-    public void RPC_SetDoorLocked(bool locked)
+    private void MoveAndAnimate(PlayerNetworkInput input)
     {
-        isFrozen = locked;
-        if (HasStateAuthority && cc != null) cc.enabled = !locked;
+        if (cc == null || !cc.enabled) return;
+
+        // 문 상호작용 중 이동 잠금
+        if (IsDoorLocked)
+        {
+            NetIsMoving = false;
+            NetIsWalking = false;
+            ApplyGravityOnly();
+            return;
+        }
+
+        Vector3 inputDir = new Vector3(input.move.x, 0f, input.move.y).normalized;
+        bool isMoving = inputDir.sqrMagnitude > 0.001f;
+
+        float speed = runSpeed;
+        Vector3 moveDir = (transform.forward * inputDir.z + transform.right * inputDir.x).normalized;
+
+        if (cc.isGrounded && YVelocity < 0f) YVelocity = groundedStick;
+        YVelocity += gravity * Runner.DeltaTime;
+        cc.Move((moveDir * speed + Vector3.up * YVelocity) * Runner.DeltaTime);
+
+        NetIsMoving = isMoving;
+        NetIsWalking = false;
     }
 
-    [Rpc(RpcSources.All, RpcTargets.All)]
-    public void RPC_PlayDoorAnimation() { if (anim != null) anim.SetTrigger("OpenDoor"); }
+    private void ApplyGravityOnly()
+    {
+        if (cc == null || !cc.enabled) return;
+        if (cc.isGrounded && YVelocity < 0f) YVelocity = groundedStick;
+        YVelocity += gravity * Runner.DeltaTime;
+        cc.Move(Vector3.up * YVelocity * Runner.DeltaTime);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    public void RPC_ResumeAfterMigration()
+    {
+        isFrozen = false;
+        if (cc != null) cc.enabled = HasInputAuthority || HasStateAuthority;
+        Debug.Log($"[KillerController] Migration 후 재개 | {gameObject.name}");
+    }
 
     [Rpc(RpcSources.All, RpcTargets.All)]
     public void RPC_PlayEmotion(string trigger)
-    { if (anim != null && !string.IsNullOrEmpty(trigger)) anim.SetTrigger(trigger); }
+    {
+        if (anim != null && !string.IsNullOrEmpty(trigger))
+            anim.SetTrigger(trigger);
+    }
 
     [Rpc(RpcSources.All, RpcTargets.All)]
     public void RPC_ReturnToIdle()
     {
         if (anim == null) return;
-        string t = NetAttackTrigger.ToString();
-        if (!string.IsNullOrEmpty(t)) anim.ResetTrigger(t);
+        anim.ResetTrigger("OpenDoor");
         anim.Play("Breathing Idle");
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     public void RPC_EquipWeapon(NetworkId weaponId)
     {
-        if (!Runner.TryFindObject(weaponId, out var obj)) return;
-        var follower = obj.GetComponent<WeaponFollower>()
-                    ?? obj.gameObject.AddComponent<WeaponFollower>();
-        follower.target      = FindBone(transform, "WeaponHolder");
-        follower.ownerKiller = this;
+        if (!Runner.TryFindObject(weaponId, out var weaponObj)) return;
+
+        var follower = weaponObj.GetComponent<WeaponFollower>();
+        if (follower == null)
+            follower = weaponObj.gameObject.AddComponent<WeaponFollower>();
+
+        follower.target = FindBoneRecursive(transform, "hand.R");
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void RPC_StartCarry(NetworkId actorId)
     {
-        if (!Runner.TryFindObject(actorId, out var obj)) return;
-        var actor = obj.GetComponent<ActorController>();
-        if (actor == null || !actor.IsDead) return;
+        if (!Runner.TryFindObject(actorId, out var actorObj)) return;
+        var actor = actorObj.GetComponent<ActorController>();
+        if (actor == null) return;
 
-        NetIsCarrying = true; actor.IsCarried = true; actor.NetIsCarried = true;
-        carriedActor  = actor;
+        if (!actor.IsDead) return;
+
+        NetIsCarrying = true;
+        actor.IsCarried = true;
+        actor.NetIsCarried = true;
+        carriedActorRef = actor;
 
         var actorCc = actor.GetComponent<CharacterController>();
         if (actorCc != null) actorCc.enabled = false;
@@ -335,55 +420,107 @@ public class KillerController : NetworkBehaviour
         actor.RPC_PlayBeingPickedUp();
     }
 
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_PlayPickup()
+    {
+        if (anim != null)
+            anim.SetTrigger("Pickup");
+    }
+
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void RPC_StopCarry(NetworkId actorId)
     {
-        if (!Runner.TryFindObject(actorId, out var obj)) return;
-        var actor = obj.GetComponent<ActorController>();
+        if (!Runner.TryFindObject(actorId, out var actorObj)) return;
+        var actor = actorObj.GetComponent<ActorController>();
         if (actor == null) return;
 
-        NetIsCarrying = false; actor.IsCarried = false; actor.NetIsCarried = false;
-        carriedActor  = null;
+        NetIsCarrying = false;
+        actor.IsCarried = false;
+        actor.NetIsCarried = false;
+        carriedActorRef = null;
 
         var actorCc = actor.GetComponent<CharacterController>();
-        if (actorCc != null) actorCc.enabled = !actor.IsDead;
+        if (actorCc != null) actorCc.enabled = true;
 
         RPC_SyncCarry(actorId, false);
+        // 내려놓기 애니메이션 없이 바로 Death_Idle로 복귀
         actor.RPC_ReturnToDeathIdle();
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_PlayPickup() { if (anim != null) anim.SetTrigger(HashPickup); }
+    private void RPC_PlayPutDown()
+    {
+        // 사용하지 않음 - 내려놓기 애니메이션 제거
+    }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_SyncCarry(NetworkId actorId, bool carrying)
     {
         NetIsCarrying = carrying;
-        if (!Runner.TryFindObject(actorId, out var obj)) return;
-        var actor = obj.GetComponent<ActorController>();
+        if (!Runner.TryFindObject(actorId, out var actorObj)) return;
+        var actor = actorObj.GetComponent<ActorController>();
         if (actor != null) actor.NetIsCarried = carrying;
     }
 
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    public void RPC_ResumeAfterMigration()
+    private Transform FindBoneRecursive(Transform parent, string boneName)
     {
-        isFrozen = false;
-        if (cc != null) cc.enabled = HasInputAuthority || HasStateAuthority;
-        if (HasInputAuthority && !HasStateAuthority) localPitchReady = false;
-        Debug.Log($"[KillerController] Migration 후 재개 | {gameObject.name}");
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // 유틸
-    // ═══════════════════════════════════════════════════════════
-    private Transform FindBone(Transform root, string boneName)
-    {
-        if (root.name == boneName) return root;
-        foreach (Transform child in root)
+        if (parent.name == boneName) return parent;
+        foreach (Transform child in parent)
         {
-            var found = FindBone(child, boneName);
+            var found = FindBoneRecursive(child, boneName);
             if (found != null) return found;
         }
         return null;
+    }
+
+    // 문 상호작용용 텔레포트
+    [Rpc(RpcSources.All, RpcTargets.All)]
+    public void RPC_Teleport(Vector3 position, Quaternion rotation)
+    {
+        if (cc != null) cc.enabled = false;
+
+        if (netTransform != null)
+            netTransform.Teleport(position, rotation);
+        else
+        {
+            transform.position = position;
+            transform.rotation = rotation;
+        }
+
+        if (HasStateAuthority)
+        {
+            NetYaw = rotation.eulerAngles.y;
+            NetPitch = 0f;
+            YVelocity = 0f;
+        }
+
+        // 클라 본인: 다음 FixedUpdateNetwork에서 NetYaw로 localYaw를 재동기화
+        if (HasInputAuthority && !HasStateAuthority)
+            localYawInitialized = false;
+
+        // 이동은 서버만 구동 → 클라는 cc 비활성 유지
+        if (cc != null)
+            cc.enabled = HasStateAuthority;
+
+        Debug.Log($"[KillerController] RPC_Teleport 완료: {position}");
+    }
+
+    // 문 상호작용 중 이동 잠금
+    [Networked] public NetworkBool IsDoorLocked { get; set; }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void RPC_SetDoorLocked(bool locked)
+    {
+        IsDoorLocked = locked;
+        Debug.Log($"[KillerController] IsDoorLocked = {locked}");
+    }
+
+    // 문 열기 애니메이션
+    [Rpc(RpcSources.All, RpcTargets.All)]
+    public void RPC_PlayDoorAnimation()
+    {
+        if (anim != null)
+            anim.SetTrigger("OpenDoor");
+        Debug.Log("[KillerController] 문 열기 애니메이션 재생");
     }
 }
